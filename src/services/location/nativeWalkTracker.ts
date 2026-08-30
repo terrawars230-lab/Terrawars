@@ -35,6 +35,7 @@ interface NativeWalkTrackerModule {
   pause(): Promise<void>;
   resume(): Promise<void>;
   stop(): Promise<void>;
+  updateNotification(title: string, body: string): Promise<void>;
   getStatus(): Promise<TrackingStatus>;
   getCurrentPosition(timeoutMs: number): Promise<NativeSample>;
   addListener(eventName: string): void;
@@ -199,6 +200,16 @@ class NativeWalkTracker implements LocationTracker {
 
   async stop(): Promise<void> {
     await this.requireModule().stop();
+  }
+
+  async updateNotification(title: string, body: string): Promise<void> {
+    // A notification that fails to refresh is cosmetic; it must never
+    // interrupt a recording in progress.
+    try {
+      await this.requireModule().updateNotification(title, body);
+    } catch {
+      logger.debug('Could not refresh the tracking notification');
+    }
   }
 
   async getStatus(): Promise<TrackingStatus> {

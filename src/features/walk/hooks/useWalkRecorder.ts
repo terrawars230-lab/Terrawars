@@ -35,6 +35,9 @@ import {useWalkStore} from '../store/walkStore';
 
 const logger = createLogger('walk-recorder');
 
+/** How often the foreground-service notification text is refreshed (FR-11). */
+const NOTIFICATION_REFRESH_MS = 10_000;
+
 export interface UseWalkRecorder {
   start: () => Promise<void>;
   pause: () => Promise<void>;
@@ -141,21 +144,18 @@ export function useWalkRecorder(options?: {
       const distance = formatDistance(store.distanceM);
       const duration = formatDuration(store.elapsedSeconds());
 
-      void locationTracker
-        .start({
-          distanceFilterM: WALK_LIMITS.samplingDistanceFilterM,
-          maxIntervalMs: WALK_LIMITS.samplingMaxIntervalMs,
-          notificationTitle: t('walk.notificationTitle'),
-          notificationBody: t('walk.notificationBody', {
-            distance: t(distance.i18nKey, {value: distance.value}),
-            duration: t(duration.i18nKey, duration.params),
-          }),
-        })
-        .catch(() => {
-          // A notification that fails to refresh is cosmetic. Never let it
-          // interrupt a recording.
-        });
-    }, 10_000);
+      // updateNotification, NOT start. Re-calling start to refresh the text
+      // would tear down and re-register the location request every ten
+      // seconds, resetting the sampling cadence and costing battery against
+      // the NFR-01 budget for a cosmetic update.
+      void locationTracker.updateNotification(
+        t('walk.notificationTitle'),
+        t('walk.notificationBody', {
+          distance: t(distance.i18nKey, {value: distance.value}),
+          duration: t(duration.i18nKey, duration.params),
+        }),
+      );
+    }, NOTIFICATION_REFRESH_MS);
 
     return () => clearInterval(interval);
   }, [t]);

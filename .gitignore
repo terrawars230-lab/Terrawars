@@ -82,6 +82,9 @@ yarn-error.log
 .env.*
 !.env.example
 
+# Local MCP config — carries a Supabase personal access token (sbp_…).
+.mcp.json
+
 # Firebase / FCM config (added in Phase 5). These carry project identifiers and
 # API keys and must be supplied per-developer, not committed.
 android/app/google-services.json

@@ -55,6 +55,15 @@ export interface LocationTracker {
   pause(): Promise<void>;
   resume(): Promise<void>;
   stop(): Promise<void>;
+  /**
+   * Updates the Android foreground-service notification text (FR-11).
+   *
+   * Separate from `start` on purpose: re-calling `start` to refresh the text
+   * would tear down and re-register the location request, resetting the
+   * sampling cadence every time the HUD ticks. No-op on iOS, where the blue
+   * status-bar indicator plays this role and carries no text of ours.
+   */
+  updateNotification(title: string, body: string): Promise<void>;
   getStatus(): Promise<TrackingStatus>;
   /** One-shot fix, used to centre the map before a walk starts (FR-53). */
   getCurrentPosition(): Promise<Omit<GpsSample, 'seq'>>;

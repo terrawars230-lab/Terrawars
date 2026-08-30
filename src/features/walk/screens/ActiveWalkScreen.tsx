@@ -8,12 +8,13 @@ import {useTranslation} from 'react-i18next';
 import MapView, {Polygon as MapPolygon, Polyline, PROVIDER_GOOGLE} from 'react-native-maps';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {Button, Screen, Text} from '@components/index';
+import {Button, Loader, Screen, Text} from '@components/index';
 import {makeStyles, useTheme} from '@core/theme/ThemeProvider';
 import {formatArea, formatDistance, formatDuration, formatPace} from '@core/utils/format';
 import type {RootStackParamList} from '@navigation/types';
 
 import {useWalkRecorder} from '../hooks/useWalkRecorder';
+import {useWalkSession} from '../hooks/useWalkSession';
 import {useWalkStore} from '../store/walkStore';
 
 /**
@@ -60,6 +61,10 @@ export function ActiveWalkScreen(): React.JSX.Element {
     },
   });
 
+  // Starts the walk on mount, or offers to resume an interrupted one (FR-15).
+  // Nothing else calls recorder.start() — this hook owns that decision.
+  const session = useWalkSession(recorder.start);
+
   // The clock ticks locally rather than from a store subscription: elapsed time
   // changes every second whether or not a GPS sample arrived, and re-rendering
   // the whole map polyline once a second would cost the NFR-03 frame budget.
@@ -101,6 +106,66 @@ export function ActiveWalkScreen(): React.JSX.Element {
       },
     ]);
   }, [navigation, recorder, t]);
+
+  // FR-15: "On relaunch the user is offered to resume or discard the
+  // interrupted walk." The walk is already on disk; this is the offer.
+  if (session.state.status === 'recovery-offer') {
+    return (
+      <Screen>
+        <View style={styles.gate}>
+          <Text variant="title1">{t('walk.resumeTitle')}</Text>
+          <Text variant="body" color="textSecondary">
+            {t('walk.resumeBody', {
+              time: new Date(session.state.startedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              }),
+            })}
+          </Text>
+          <View style={styles.gateActions}>
+            <Button
+              label={t('walk.resumeConfirm')}
+              onPress={() => {
+                void session.resumeInterrupted();
+              }}
+            />
+            <Button
+              label={t('walk.resumeDiscard')}
+              variant="ghost"
+              onPress={() => {
+                void session.discardAndStartFresh();
+              }}
+            />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
+  if (session.state.status === 'failed') {
+    return (
+      <Screen>
+        <View style={styles.gate}>
+          <Text variant="title2">{t('common.somethingWentWrong')}</Text>
+          <Button
+            label={t('common.retry')}
+            onPress={() => {
+              void session.retry();
+            }}
+          />
+          <Button label={t('common.back')} variant="ghost" onPress={() => navigation.goBack()} />
+        </View>
+      </Screen>
+    );
+  }
+
+  if (session.state.status === 'checking' || session.state.status === 'starting') {
+    return (
+      <Screen>
+        <Loader label={t('common.loading')} />
+      </Screen>
+    );
+  }
 
   const distance = formatDistance(distanceM);
   const duration = formatDuration(elapsedS);
@@ -240,5 +305,14 @@ const useStyles = makeStyles(theme => ({
   actions: {
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  gate: {
+    flex: 1,
+    justifyContent: 'center',
+    gap: theme.spacing.lg,
+  },
+  gateActions: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
   },
 }));

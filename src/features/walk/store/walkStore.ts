@@ -26,7 +26,7 @@ const logger = createLogger('walk-store');
 export type WalkPhase = 'idle' | 'recording' | 'paused' | 'finishing';
 
 /** The shape persisted to disk. Versioned via its storage key. */
-interface PersistedWalk {
+export interface PersistedWalk {
   walkId: string;
   clientWalkId: string;
   startedAt: number;

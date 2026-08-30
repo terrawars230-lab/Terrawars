@@ -25,6 +25,25 @@ create schema if not exists auth;
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
 
+-- The client roles must exist BEFORE the migrations run: 0200_profiles.sql
+-- grants execute on is_username_available to `authenticated`, and a bare
+-- Postgres has no such role. A real Supabase project pre-creates all three, so
+-- this is filling a harness gap, not working around a migration bug.
+-- helpers/99_grants.sql grants them table privileges once the tables exist.
+do $roles$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    create role authenticated nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin noinherit bypassrls;
+  end if;
+end;
+$roles$;
+
 -- Minimal stand-in for Supabase's auth.users. Only the columns the migrations
 -- actually touch.
 create table if not exists auth.users (

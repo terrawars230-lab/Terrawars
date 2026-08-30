@@ -42,7 +42,9 @@ export type RootStackParamList = {
 
   MainTabs: NavigatorScreenParams<MainTabParamList>;
 
-  ActiveWalk: {walkId: string};
+  // No params: the walk id is assigned by the server in startWalk() and lives
+  // in the walk store. A route param would be a second, stale copy of it.
+  ActiveWalk: undefined;
   /**
    * Carries only the claim id. The result is re-read from the server rather
    * than passed through navigation params, so a backgrounded app that gets

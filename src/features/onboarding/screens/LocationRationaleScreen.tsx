@@ -8,7 +8,6 @@ import {useTranslation} from 'react-i18next';
 
 import {Button, Screen, Text} from '@components/index';
 import {makeStyles} from '@core/theme/ThemeProvider';
-import {generateUuid} from '@features/walk/hooks/useWalkRecorder';
 import type {RootStackParamList} from '@navigation/types';
 import {
   openAppSettings,
@@ -60,7 +59,7 @@ export function LocationRationaleScreen(): React.JSX.Element {
       await requestMotionPermission();
 
       if (route.params?.returnTo === 'ActiveWalk') {
-        navigation.replace('ActiveWalk', {walkId: generateUuid()});
+        navigation.replace('ActiveWalk');
       } else {
         navigation.goBack();
       }
