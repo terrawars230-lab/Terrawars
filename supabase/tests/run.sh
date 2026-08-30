@@ -10,7 +10,9 @@
 #   2. applies every migration in order,
 #   3. applies seed.sql, because every rule function reads game_config and
 #      raises on a missing key,
-#   4. runs each test file inside a transaction that is rolled back, so the
+#   4. loads the geometry fixtures and the client-role grants, both of which
+#      depend on objects the migrations create,
+#   5. runs each test file inside a transaction that is rolled back, so the
 #      suite is repeatable and leaves nothing behind.
 #
 # ⚠️ NEVER point this at production. Step 1 replaces auth.uid().
@@ -42,7 +44,12 @@ done
 echo "==> Seeding game_config"
 "${PSQL[@]}" -f "$ROOT/supabase/seed.sql"
 
-# After the migrations, because the grants target tables the migrations create.
+# Both of these run AFTER the migrations: the fixtures are typed against
+# extensions.geometry, which does not exist until migration 0000 creates PostGIS,
+# and the grants target tables the migrations create.
+echo "==> Loading geometry fixtures"
+"${PSQL[@]}" -f "$ROOT/supabase/tests/helpers/98_fixtures.sql"
+
 echo "==> Granting the client roles (so RLS is what blocks, not a missing grant)"
 "${PSQL[@]}" -f "$ROOT/supabase/tests/helpers/99_grants.sql"
 

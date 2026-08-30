@@ -7,6 +7,12 @@
 *.bat  text eol=crlf
 *.cmd  text eol=crlf
 
+# Shell scripts must keep LF even on a Windows checkout: a CRLF shebang makes
+# the kernel look for an interpreter named "bash" and the script dies with a
+# confusing "bad interpreter" error on CI.
+*.sh      text eol=lf
+gradlew   text eol=lf
+
 # Binary assets: never transform, never diff as text.
 *.png     binary
 *.jpg     binary
