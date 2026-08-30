@@ -52,6 +52,18 @@ jobs:
       - name: Test
         run: npm run test:coverage
 
+      # Bundles the app. This catches module-resolution and import errors that
+      # the typecheck cannot see — Metro resolves specifiers, tsc resolves
+      # types, and they can disagree. A broken path alias typechecks perfectly
+      # and then red-screens on device with "Unable to resolve module".
+      - name: Bundle (Android)
+        run: |
+          npx react-native bundle --platform android --dev true             --entry-file index.js --bundle-output /tmp/android.bundle             --assets-dest /tmp/android-assets --max-workers 2
+
+      - name: Bundle (iOS)
+        run: |
+          npx react-native bundle --platform ios --dev true             --entry-file index.js --bundle-output /tmp/ios.bundle             --assets-dest /tmp/ios-assets --max-workers 2
+
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4

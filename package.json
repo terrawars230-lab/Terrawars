@@ -14,7 +14,9 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "verify": "npm run typecheck && npm run lint && npm test",
-    "test:sql": "bash supabase/tests/run.sh"
+    "test:sql": "bash supabase/tests/run.sh",
+    "start:reset": "react-native start --reset-cache",
+    "bundle:check": "react-native bundle --platform android --dev true --entry-file index.js --bundle-output /dev/null --max-workers 2"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

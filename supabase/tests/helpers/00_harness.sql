@@ -23,6 +23,36 @@
 
 create schema if not exists auth;
 create schema if not exists extensions;
+
+-- Relocate PostGIS into `extensions`.
+--
+-- The postgis/postgis Docker image pre-installs PostGIS into `public`. Supabase
+-- puts it in `extensions`, and every migration and function here is written
+-- against `extensions.geometry` — so on the CI image, migration 0000's
+-- `create extension if not exists postgis with schema extensions` finds it
+-- already present, skips, and leaves it in `public`. The next migration then
+-- fails with `type "extensions.geometry" does not exist`.
+--
+-- PostGIS is not relocatable, so ALTER EXTENSION ... SET SCHEMA will not move
+-- it; it has to be dropped and recreated. Safe here and nowhere else: the
+-- harness only ever runs against an empty, disposable database, and run.sh
+-- refuses to point at a hosted project.
+do $postgis$
+begin
+  if exists (
+    select 1
+      from pg_extension e
+      join pg_namespace n on n.oid = e.extnamespace
+     where e.extname = 'postgis' and n.nspname <> 'extensions'
+  ) then
+    drop extension if exists postgis_tiger_geocoder cascade;
+    drop extension if exists postgis_topology cascade;
+    drop extension if exists postgis cascade;
+  end if;
+end;
+$postgis$;
+
+create extension if not exists postgis  with schema extensions;
 create extension if not exists pgcrypto with schema extensions;
 
 -- The client roles must exist BEFORE the migrations run: 0200_profiles.sql
