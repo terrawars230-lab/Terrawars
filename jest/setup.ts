@@ -11,6 +11,9 @@ jest.mock('react-native-config', () => ({
     GOOGLE_MAPS_API_KEY_ANDROID: 'test-android-key',
     GOOGLE_MAPS_API_KEY_IOS: 'test-ios-key',
     SENTRY_DSN: '',
+    // Off in tests: the logger is verified by its own suite, and letting it
+    // write to the console buries the actual assertions.
+    DEBUG_LOGGING: 'false',
     API_TIMEOUT_MS: '15000',
   },
 }));
@@ -45,6 +48,10 @@ jest.mock('react-native-mmkv', () => {
   }
   return {MMKV};
 });
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
 
 jest.mock('@react-native-community/netinfo', () => ({
   __esModule: true,

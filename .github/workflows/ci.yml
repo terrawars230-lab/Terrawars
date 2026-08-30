@@ -1,0 +1,132 @@
+name: CI
+
+# doc 07 Phase 0: "GitHub Actions: analyze, test, build debug APK on PR" with
+# "CI is green on a trivial PR" as the acceptance criterion.
+#
+# The jobs are split so a failure names the thing that broke. `verify` runs on
+# every push and takes under a minute; the Android build only runs on PRs and
+# on main, because it takes several minutes and rarely catches anything the
+# typecheck did not.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to a PR cancels the previous run. Without this a branch under
+# active development queues builds it will never look at.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck · Lint · Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Must match the `engines.node` floor in package.json.
+          node-version: 22
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly what the
+      # lockfile says and fails if the lockfile and package.json disagree,
+      # which is the whole point of running this in CI.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # The coverage gate on src/geo/ is configured in jest.config.js and is
+      # what stops the geometry engine regressing silently (CLAUDE.md rule 4).
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # gitleaks needs history to scan the commits a PR adds, not just the
+          # final tree — a key that was committed and then removed is still
+          # a leaked key.
+          fetch-depth: 0
+
+      # CLAUDE.md rule 8: secrets are never committed. This is the backstop for
+      # when someone bypasses .gitignore with `git add -f`.
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assert no .env file is tracked
+        run: |
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "::error::.env is tracked. Only .env.example may be committed."
+            exit 1
+          fi
+          echo "OK: .env is not tracked."
+
+  android:
+    name: Android debug build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      # react-native-config reads .env at build time and the Gradle config
+      # substitutes GOOGLE_MAPS_API_KEY_ANDROID into the manifest. CI has no
+      # secrets, so it builds against the blank template — the APK compiles and
+      # runs, the map just renders no tiles. That is the correct trade: CI
+      # proves the build is not broken without ever holding a key.
+      - name: Create a blank .env for the build
+        run: cp .env.example .env
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: terrawars-debug
+          path: android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7

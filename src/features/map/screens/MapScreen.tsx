@@ -13,12 +13,8 @@ import {queryKeys} from '@core/constants/queryKeys';
 import {makeStyles, useTheme} from '@core/theme/ThemeProvider';
 import type {MapBounds} from '@core/types/geo';
 
-import {
-  fetchParcelsInBounds,
-  regionToBounds,
-  regionToZoom,
-  type ParcelFeature,
-} from '../api/mapApi';
+import {fetchParcelsInBounds, type ParcelFeature} from '../api/mapApi';
+import {regionToBounds, regionToZoom} from '../utils/viewport';
 
 /**
  * The world map (FR-50 … FR-54). The app's home surface.

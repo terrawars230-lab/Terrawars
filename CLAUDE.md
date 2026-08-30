@@ -9,22 +9,32 @@ becomes territory you own on a shared world map, and rival players can walk into
 your land and take the overlap. Android first (package `com.terrawars`), iOS
 later.
 
-The repo is currently a **fresh React Native 0.87.1 + TypeScript scaffold**
-(`@react-native-community/cli`). Only the template screen exists so far
-([App.tsx](App.tsx) renders `NewAppScreen`). None of the game is built yet —
-this is Phase 0.
+Phase 0 is complete: project structure, the client geometry engine, the full
+database schema with claim resolution, native location tracking on both
+platforms, and the primary screens are in place.
 
-## ⚠️ Tech-stack discrepancy — resolve before building features
+## Stack — decided, do not re-litigate
 
-`Doc_Files/` is a complete product/design spec written under the codename
-**"TerraClaim"**. Those docs specify a **Flutter + Supabase/PostGIS** stack and
-[explicitly reject React Native](Doc_Files/02-tech-stack.md) (decision D-01).
-The actual scaffold is React Native.
+The project owner has resolved the discrepancy between `Doc_Files/` and this
+repo. The stack is:
 
-So the docs are the source of truth for **what to build and the game rules**, but
-**not** for the client tech, repo layout (`app/lib/...`, `supabase/...`), or
-Flutter-specific package/architecture rules. Confirm with the project owner which
-stack wins before implementing anything from the phased plan. Do not assume.
+| Layer | Choice | Overrides |
+|---|---|---|
+| Client | **React Native 0.87 + TypeScript** (`@react-native-community/cli`) | doc 02 decision **D-01**, which chose Flutter and rejected React Native |
+| Backend | **Supabase** — PostgreSQL + PostGIS, RLS, RPC | unchanged from doc 02 (D-02, D-05) |
+| Maps | **Google Maps** on both Android and iOS | resolves open question **OQ-2**, which had defaulted to MapLibre |
+| Platforms | **Android and iOS together** | doc 01 scoped iOS out of v1; both are now in scope |
+| Package id | `com.terrawars`, app name TerraWars | resolves **OQ-1** |
+
+`Doc_Files/` remains the source of truth for **what to build and the game
+rules** — every `FR-xx`, `NFR-xx` and `GR-xx`. It is **not** the source of truth
+for client technology, repo layout (`app/lib/...`), or any Flutter-specific
+package or architecture guidance. Where a doc names a Flutter package or a Dart
+API, translate the intent; do not follow it literally.
+
+Scale target: 10 000+ users. Every design decision assumes that, which is why
+ownership is stored as per-parcel rows (GR-10), the viewport query simplifies by
+zoom (doc 04 §4), and `user_stats` is denormalised rather than computed on read.
 
 ## Commands
 
@@ -32,22 +42,66 @@ stack wins before implementing anything from the phased plan. Do not assume.
 npm start              # Metro bundler
 npm run android        # build + run on Android device/emulator
 npm run ios            # build + run on iOS simulator (needs `bundle exec pod install` in ios/ first)
-npm test               # Jest (@react-native/jest-preset)
-npm run lint           # ESLint (@react-native config)
-npx tsc --noEmit       # typecheck (no npm script for it yet)
+
+npm run verify         # typecheck + lint + test — run this before every commit
+npm run typecheck      # tsc --noEmit
+npm run lint           # ESLint, --max-warnings 0
+npm test               # Jest
+npm run test:coverage  # enforces the src/geo/ coverage gate
 ```
 
-Run a single test: `npm test -- __tests__/App.test.tsx` or `-t "renders correctly"`.
+Run a single test: `npm test -- src/geo/__tests__/loopDetection.test.ts` or
+`npm test -- -t "figure-eight"`.
 
 Node >= 22.11 required.
 
+**Environment is read at build time.** `react-native-config` injects `.env` into
+JS, the Android manifest and the iOS Info.plist when the app is compiled. A
+changed `.env` needs `npm run android` / `npm run ios`, not a Metro reload.
+
 ## Layout
 
-- [App.tsx](App.tsx) — root component. [index.js](index.js) registers it via `AppRegistry`.
-- [__tests__/](__tests__/) — Jest tests.
-- `android/`, `ios/` — native projects.
+```
+src/
+  app/          Root component + providers (query client, theme, i18n, navigation)
+  navigation/   Navigators, typed param lists, deep links
+  core/         Cross-cutting: config, api, storage, theme, i18n, logger, utils
+  geo/          Client geometry engine — ADVISORY ONLY, see below
+  services/     Native-facing: location tracking, permissions
+  components/   Shared UI kit — import from `@components/index`, never a deep path
+  features/     auth · onboarding · map · walk · profile · leaderboard · settings
+                each with api/ · screens/ · hooks/ · store/ · components/
+supabase/
+  migrations/   Schema, RLS, and the claim-resolution functions, in order
+  seed.sql      game_config values + the deleted-account tombstone owner
+```
+
+- [index.js](index.js) registers [src/app/App.tsx](src/app/App.tsx) via `AppRegistry`.
+- Native: [android/app/src/main/java/com/terrawars/location/](android/app/src/main/java/com/terrawars/location/)
+  (Kotlin foreground service) and [ios/TerraWars/WalkTracker.swift](ios/TerraWars/WalkTracker.swift).
+- Tests live next to what they test, in `__tests__/`.
 - [Doc_Files/](Doc_Files/) — the product spec. Read in order; start with
   [Doc_Files/README.md](Doc_Files/README.md).
+
+**Path aliases** (`@core/…`, `@features/…`, `@geo/…`, `@components/…`,
+`@services/…`, `@navigation/…`, `@app/…`) are declared in THREE places that must
+change together: [tsconfig.json](tsconfig.json), [babel.config.js](babel.config.js)
+and [jest.config.js](jest.config.js). TypeScript resolves the types, Babel
+resolves the runtime require, Jest resolves the test import — miss one and you
+get a green typecheck with a red runtime.
+
+## `src/geo/` is advisory, always
+
+The client mirrors GR-01…GR-05 so the walk HUD can show a live area estimate
+(FR-14) and prompt "claim this area?" the instant a loop closes (FR-18). It is a
+preview, never a result. `finish_walk` decides ownership, and a `valid: true`
+preview can still be rejected — the client cannot see a rival's parcel, a
+protection window, or the real PostGIS area.
+
+When you change a rule, change it in **both** places and say so in the commit:
+`src/geo/` and the matching `supabase/migrations/` function. A client that
+disagrees with the server produces a user who was promised land and did not get
+it, which reads as a scoring bug.
 
 ## The design docs (read the relevant one before coding that area)
 
