@@ -1,12 +1,16 @@
 module.exports = {
   root: true,
-  extends: ['@react-native', 'plugin:import/recommended', 'plugin:import/typescript'],
+  // Deliberately NOT extending `plugin:import/recommended`. That preset turns on
+  // import/namespace, import/default and import/no-named-as-default, which all
+  // need to resolve and parse the target module — and choke on react-native's
+  // Flow-typed source. Every one of them checks something `tsc` already checks,
+  // properly, using the real type information.
+  //
+  // What is left is the two rules TypeScript does NOT do: import ordering and
+  // duplicate detection. Both work on the literal path string, so they need no
+  // resolver and no native dependencies.
+  extends: ['@react-native'],
   plugins: ['import'],
-  settings: {
-    'import/resolver': {
-      typescript: {alwaysTryTypes: true, project: './tsconfig.json'},
-    },
-  },
   rules: {
     // Import hygiene — a predictable import block is the cheapest readability win
     // in a codebase several people touch.
@@ -27,7 +31,6 @@ module.exports = {
         alphabetize: {order: 'asc', caseInsensitive: true},
       },
     ],
-    'import/no-unresolved': 'error',
     'import/no-duplicates': 'error',
     'no-console': ['warn', {allow: ['warn', 'error']}],
     // `void somePromise()` is how we mark a deliberately un-awaited promise.
