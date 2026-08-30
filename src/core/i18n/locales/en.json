@@ -1,0 +1,255 @@
+{
+  "common": {
+    "appName": "TerraWars",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "continue": "Continue",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "save": "Save",
+    "retry": "Try again",
+    "close": "Close",
+    "loading": "Loading…",
+    "somethingWentWrong": "Something went wrong",
+    "offline": "You're offline",
+    "offlineDescription": "Your walk is being saved on this device and will sync when you're back online."
+  },
+
+  "units": {
+    "areaSquareMetres": "{{value}} m²",
+    "areaSquareKilometres": "{{value}} km²",
+    "distanceMetres": "{{value}} m",
+    "distanceKilometres": "{{value}} km",
+    "paceMinPerKm": "{{value}} /km",
+    "durationHoursMinutes": "{{hours}}h {{minutes}}m",
+    "durationMinutesSeconds": "{{minutes}}:{{seconds}}"
+  },
+
+  "onboarding": {
+    "step1Title": "Walk a loop",
+    "step1Body": "Start a walk and take any route you like — as long as you come back around.",
+    "step2Title": "Close the loop",
+    "step2Body": "When your path crosses itself or returns near the start, the ground inside becomes yours.",
+    "step3Title": "Hold your ground",
+    "step3Body": "Other players can walk into your land and take it. New territory is protected for {{hours}} hours.",
+    "getStarted": "Get started",
+    "skip": "Skip"
+  },
+
+  "auth": {
+    "signInTitle": "Welcome back",
+    "signUpTitle": "Claim your first patch",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signUp": "Create account",
+    "continueWithGoogle": "Continue with Google",
+    "noAccountPrompt": "New here? Create an account",
+    "hasAccountPrompt": "Already playing? Sign in",
+    "forgotPassword": "Forgot your password?",
+    "signOut": "Sign out",
+    "invalidCredentials": "That email and password don't match an account.",
+    "emailInvalid": "Enter a valid email address.",
+    "passwordTooShort": "Use at least 8 characters."
+  },
+
+  "username": {
+    "title": "Pick your name",
+    "subtitle": "This is how other players see you on the map. You can't change it later.",
+    "placeholder": "yourname",
+    "rules": "3–20 characters. Lowercase letters, numbers and underscores.",
+    "checking": "Checking…",
+    "available": "{{username}} is available",
+    "taken": "{{username}} is already taken",
+    "invalid": "Use 3–20 lowercase letters, numbers or underscores.",
+    "confirm": "Claim this name"
+  },
+
+  "permissions": {
+    "locationTitle": "TerraWars needs your location while you walk",
+    "locationBody": "We record your route only while a walk is running, so we can work out the area you enclosed. We never track you in the background, and other players never see your route or your live position — only the finished territory.",
+    "locationBullet1": "Only while a walk is running",
+    "locationBullet2": "Never shared with other players",
+    "locationBullet3": "Raw location deleted after 30 days",
+    "locationGrant": "Allow location",
+    "locationDenied": "Without location access we can't record a walk.",
+    "locationOpenSettings": "Open settings",
+    "notificationsTitle": "Know when you're raided",
+    "notificationsBody": "We'll let you know when another player takes some of your land, so you can go and take it back.",
+    "notificationsGrant": "Turn on notifications",
+    "notificationsSkip": "Not now"
+  },
+
+  "safety": {
+    "title": "Walk safely",
+    "body": "Watch the road, not your phone. Don't walk into traffic, private property, or anywhere unsafe to claim territory.",
+    "acknowledge": "I understand"
+  },
+
+  "battery": {
+    "title": "Keep your walk running",
+    "body": "Your phone may stop the walk in the background to save battery. Allowing unrestricted background activity for TerraWars keeps your route recording all the way round.",
+    "openSettings": "Open battery settings",
+    "later": "Later"
+  },
+
+  "map": {
+    "title": "World",
+    "recenter": "Centre on me",
+    "showOnlyMine": "My land only",
+    "showEveryone": "Everyone",
+    "zoomInForParcels": "Zoom in to see territory",
+    "parcelsHere": "{{count}} parcel here",
+    "parcelsHere_other": "{{count}} parcels here",
+    "emptyTitle": "No territory here yet",
+    "emptyBody": "Be the first to walk a loop around this area.",
+    "loadFailed": "Couldn't load the map. Check your connection.",
+    "areaTooLarge": "Zoom in to load territory."
+  },
+
+  "parcel": {
+    "ownedBy": "Owned by {{username}}",
+    "ownedByYou": "Your territory",
+    "area": "Area",
+    "claimed": "Claimed",
+    "protectedUntil": "Protected until {{time}}",
+    "protectedBadge": "Protected",
+    "notProtected": "Open to raids",
+    "viewProfile": "View profile"
+  },
+
+  "walk": {
+    "start": "Start walk",
+    "pause": "Pause",
+    "resume": "Resume",
+    "finish": "Finish",
+    "discard": "Discard walk",
+    "discardConfirmTitle": "Discard this walk?",
+    "discardConfirmBody": "Your route and distance won't be saved.",
+    "distance": "Distance",
+    "duration": "Time",
+    "pace": "Pace",
+    "enclosedArea": "Enclosed",
+    "notificationTitle": "Walk in progress",
+    "notificationBody": "{{distance}} · {{duration}}",
+    "loopReadyTitle": "Claim this area?",
+    "loopReadyBody": "You've closed a loop around {{area}}.",
+    "loopReadyConfirm": "Claim it",
+    "loopReadyKeepWalking": "Keep walking",
+    "keepWalkingHint": "Keep going — your loop isn't closed yet.",
+    "resumeTitle": "Resume your walk?",
+    "resumeBody": "You have a walk from {{time}} that wasn't finished.",
+    "resumeConfirm": "Resume",
+    "resumeDiscard": "Discard it",
+    "autoEndedDistance": "Walk ended — you passed the {{distance}} limit.",
+    "autoEndedDuration": "Walk ended — you passed the {{duration}} limit.",
+    "gpsWeak": "Weak GPS signal",
+    "submitting": "Working out your claim…",
+    "queuedOffline": "Saved. We'll claim this as soon as you're online."
+  },
+
+  "claimResult": {
+    "acceptedTitle": "Land claimed",
+    "areaGained": "Area gained",
+    "areaStolen": "Taken from others",
+    "newTotal": "Your territory",
+    "rank": "Global rank",
+    "rankUp": "Up {{places}} places",
+    "stoleFrom": "You took {{area}} from {{username}}",
+    "blockedTitle": "Some land was shielded",
+    "blockedBody": "{{username}}'s parcel was claimed recently and is protected until {{time}}. You kept everything outside it.",
+    "share": "Share",
+    "backToMap": "Back to map",
+    "rejectedTitle": "No claim this time",
+    "walkStillSaved": "Your walk is saved: {{distance}} in {{duration}}."
+  },
+
+  "errors": {
+    "ERR_LOOP_NOT_CLOSED": "Your walk didn't make a loop. Walk back near where you started to claim the area.",
+    "ERR_AREA_TOO_SMALL": "That loop is too small to claim. Try one at least the size of a city block.",
+    "ERR_AREA_TOO_LARGE": "That loop is too big to claim in one go. Try splitting it into smaller loops.",
+    "ERR_DISTANCE_TOO_SHORT": "You need to walk at least {{distance}} to claim land.",
+    "ERR_DURATION_TOO_SHORT": "That was a bit quick. Walks need to last at least {{duration}}.",
+    "ERR_TOO_FAST": "This looks like a ride, not a walk. Claims are for walking and running only.",
+    "ERR_IMPOSSIBLE_AREA": "We couldn't verify this route. Your walk was still saved.",
+    "ERR_TELEPORT": "Your location jumped during this walk. Your walk was still saved.",
+    "ERR_TOO_FEW_POINTS": "We didn't get enough location readings on this walk.",
+    "ERR_INTEGRITY": "We couldn't verify your location data on this device.",
+    "ERR_VALIDATION": "Something in that request didn't look right.",
+    "BBOX_TOO_LARGE": "Zoom in to load territory.",
+    "UNAUTHENTICATED": "Please sign in again.",
+    "ACCOUNT_SUSPENDED": "This account can't play right now. Contact support if you think that's wrong.",
+    "NOT_FOUND": "We couldn't find that.",
+    "ACTIVE_WALK_EXISTS": "You already have a walk in progress.",
+    "USERNAME_TAKEN": "That name is taken. Try another.",
+    "WALK_ALREADY_FINISHED": "That walk has already been finished.",
+    "COLOR_CHANGE_COOLDOWN": "You can change your colour once every 30 days.",
+    "RATE_LIMITED": "You've claimed a lot today. Try again later.",
+    "INTERNAL": "Something went wrong on our side. Try again in a moment.",
+    "NETWORK_UNAVAILABLE": "No connection. Check your network and try again.",
+    "TIMEOUT": "That took too long. Try again.",
+    "UNKNOWN": "Something went wrong. Try again."
+  },
+
+  "leaderboard": {
+    "title": "Leaderboard",
+    "global": "Global",
+    "weekly": "This week",
+    "local": "{{city}}",
+    "localFallback": "Nearby",
+    "you": "You",
+    "yourRank": "You're #{{rank}}",
+    "unranked": "Claim some land to get on the board",
+    "emptyTitle": "Nobody here yet",
+    "emptyBody": "Walk a loop and you'll be first.",
+    "setCityPrompt": "Set your city to see a local board"
+  },
+
+  "profile": {
+    "title": "Profile",
+    "totalArea": "Territory",
+    "parcels": "Parcels",
+    "distance": "Distance walked",
+    "walks": "Walks",
+    "bestClaim": "Best claim",
+    "stolen": "Taken from others",
+    "lost": "Lost to others",
+    "raidHistory": "Raids",
+    "raidIncoming": "{{username}} took {{area}} from you",
+    "raidOutgoing": "You took {{area}} from {{username}}",
+    "noRaidsTitle": "No raids yet",
+    "noRaidsBody": "Walk over someone else's land to take it."
+  },
+
+  "settings": {
+    "title": "Settings",
+    "account": "Account",
+    "notifications": "Notifications",
+    "notifyStolen": "Tell me when I'm raided",
+    "notifyWeekly": "Weekly leaderboard result",
+    "privacy": "Privacy",
+    "hideWalkStart": "Hide the start of my walks",
+    "hideWalkStartHint": "Trims the first and last {{distance}} of your route so a walk from home doesn't put your front door on the map.",
+    "territoryColor": "Territory colour",
+    "colorCooldown": "You can change this again on {{date}}",
+    "homeCity": "Home city",
+    "safetyNotice": "Walk safely",
+    "batteryGuidance": "Keep walks running",
+    "privacyPolicy": "Privacy policy",
+    "termsOfService": "Terms of service",
+    "appealsEmail": "Appeal a decision",
+    "deleteAccount": "Delete my account",
+    "deleteAccountTitle": "Delete your account?",
+    "deleteAccountBody": "Your profile, walks and location history are removed. Your territory stays on the map but no longer belongs to anyone. This can't be undone.",
+    "deleteAccountConfirm": "Type DELETE to confirm",
+    "version": "Version {{version}}"
+  },
+
+  "notifications": {
+    "stolenTitle": "You've been raided",
+    "stolenBody": "{{username}} took {{area}} of your territory.",
+    "weeklyTitle": "Your week is in",
+    "weeklyBody": "You finished #{{rank}} with {{area}} gained."
+  }
+}

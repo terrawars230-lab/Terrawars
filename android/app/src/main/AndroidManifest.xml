@@ -1,0 +1,88 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- doc 06 §5. Core walk tracking. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!--
+      ACCESS_BACKGROUND_LOCATION is DELIBERATELY ABSENT (ADR D-04, CLAUDE.md
+      rule 5). A foreground service started while the app is visible keeps
+      receiving updates without it, and requesting it triggers Play's
+      sensitive-permission review for no functional gain. Do not add it without
+      an explicit decision from the project owner.
+    -->
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Required from Android 14 for a location-typed foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Android 13+, for raid alerts (FR-42, FR-70). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- doc 06 §2: the step-counter cross-check, the strongest cheap anti-cheat
+         signal we have. Requested at walk time, and a denial degrades to a soft
+         flag rather than blocking play. -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Keeps the app off devices that physically cannot play it, rather than
+         letting someone install it and find that nothing works. -->
+    <uses-feature android:name="android.hardware.location.gps" android:required="true" />
+
+    <application
+      android:name=".MainApplication"
+      android:label="@string/app_name"
+      android:icon="@mipmap/ic_launcher"
+      android:roundIcon="@mipmap/ic_launcher_round"
+      android:allowBackup="false"
+      android:theme="@style/AppTheme"
+      android:usesCleartextTraffic="${usesCleartextTraffic}"
+      android:supportsRtl="true">
+
+      <!-- Injected from .env by react-native-config at build time. The key is
+           restricted to this package's SHA-1 in the Google Cloud console, so a
+           key extracted from the APK is not usable elsewhere. -->
+      <meta-data
+        android:name="com.google.android.geo.API_KEY"
+        android:value="${GOOGLE_MAPS_API_KEY_ANDROID}" />
+
+      <activity
+        android:name=".MainActivity"
+        android:label="@string/app_name"
+        android:configChanges="keyboard|keyboardHidden|orientation|screenLayout|screenSize|smallestScreenSize|uiMode"
+        android:launchMode="singleTask"
+        android:windowSoftInputMode="adjustResize"
+        android:exported="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+
+        <!-- Deep links: OAuth callback, and FR-42's "tap the raid notification
+             to open that spot on the map". -->
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="terrawars" android:host="auth" />
+        </intent-filter>
+        <intent-filter>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.DEFAULT" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="terrawars" android:host="map" />
+        </intent-filter>
+      </activity>
+
+      <!-- FR-11 / doc 06 §5. The type here must match the type passed to
+           startForeground(), and must be declared and justified in the Play
+           Console for Android 14+. -->
+      <service
+        android:name=".location.WalkTrackingService"
+        android:foregroundServiceType="location"
+        android:exported="false" />
+
+    </application>
+</manifest>

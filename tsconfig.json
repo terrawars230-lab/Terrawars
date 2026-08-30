@@ -1,0 +1,29 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    // No `baseUrl`: it is deprecated in TypeScript 6. Since TS 5.0 `paths`
+    // entries resolve relative to this file, which is what we want anyway.
+    // Keep this map in sync with babel.config.js and jest.config.js.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@app/*": ["./src/app/*"],
+      "@core/*": ["./src/core/*"],
+      "@components/*": ["./src/components/*"],
+      "@features/*": ["./src/features/*"],
+      "@geo/*": ["./src/geo/*"],
+      "@navigation/*": ["./src/navigation/*"],
+      "@services/*": ["./src/services/*"]
+    },
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": false,
+    "types": ["jest", "react-native"]
+  },
+  "include": ["src/**/*", "index.js", "*.ts", "*.tsx", "@types/**/*.d.ts"],
+  "exclude": ["node_modules", "android", "ios", "**/Pods", "coverage"]
+}

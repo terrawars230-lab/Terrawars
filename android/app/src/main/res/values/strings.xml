@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">TerraWars</string>
+
+    <!-- Foreground-service notification channel (FR-11). Kept in Android
+         resources rather than the JS i18n bundle because the channel is created
+         before any JS has run. -->
+    <string name="walk_channel_name">Walk tracking</string>
+    <string name="walk_channel_description">Shows your distance and time while a walk is recording.</string>
+</resources>
