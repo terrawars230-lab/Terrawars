@@ -88,6 +88,43 @@ jobs:
           fi
           echo "OK: .env is not tracked."
 
+  sql:
+    name: SQL rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # A real PostGIS instance. The migrations and the claim-resolution
+    # functions are the part of this system that decides ownership, so they
+    # are verified against actual PostGIS rather than reviewed by eye.
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+
+      # Applies the harness, every migration in order, the seed, then each
+      # rule suite. Any failed assertion raises and ON_ERROR_STOP fails the job.
+      - name: Run the SQL rule suite
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+        run: bash supabase/tests/run.sh
+
   android:
     name: Android debug build
     runs-on: ubuntu-latest

@@ -54,9 +54,15 @@ begin
             '{"provider":"system"}'::jsonb, '{"username":"deleted_player"}'::jsonb)
     on conflict (id) do nothing;
 
+    -- The on_auth_user_created trigger has already created the profile and
+    -- assigned it a palette colour. Override to neutral grey so land belonging
+    -- to deleted accounts reads as unowned rather than as some live player's.
     insert into public.profiles (id, username, display_name, color_hex)
     values (v_id, 'deleted_player', '[deleted]', '#9CA3AF')
-    on conflict (id) do nothing;
+    on conflict (id) do update
+      set username     = excluded.username,
+          display_name = excluded.display_name,
+          color_hex    = excluded.color_hex;
 
     insert into public.user_stats (user_id) values (v_id)
     on conflict (user_id) do nothing;
