@@ -50,6 +50,17 @@ class WalkTrackingService : Service() {
     const val ACTION_RESUME = "com.terrawars.walk.RESUME"
     const val ACTION_STOP = "com.terrawars.walk.STOP"
 
+    /**
+     * Refreshes the notification text ONLY (FR-11).
+     *
+     * Separate from ACTION_START because it is delivered every ten seconds
+     * while the HUD ticks. Routing it through handleStart re-registered the
+     * location request, reset the paused flag and zeroed the sample counter on
+     * every tick — which restarted the GPS cadence mid-walk, silently
+     * un-paused a paused walk, and made the distance readout jump.
+     */
+    const val ACTION_UPDATE_NOTIFICATION = "com.terrawars.walk.UPDATE_NOTIFICATION"
+
     const val EXTRA_DISTANCE_FILTER_M = "distanceFilterM"
     const val EXTRA_MAX_INTERVAL_MS = "maxIntervalMs"
     const val EXTRA_NOTIFICATION_TITLE = "notificationTitle"
@@ -113,6 +124,7 @@ class WalkTrackingService : Service() {
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     when (intent?.action) {
       ACTION_START -> handleStart(intent)
+      ACTION_UPDATE_NOTIFICATION -> handleUpdateNotification(intent)
       ACTION_PAUSE -> handlePause()
       ACTION_RESUME -> handleResume()
       ACTION_STOP -> handleStop("user")
@@ -132,9 +144,33 @@ class WalkTrackingService : Service() {
     return START_NOT_STICKY
   }
 
+  /**
+   * Updates the persistent notification text without touching the recording.
+   *
+   * Deliberately does nothing when the service is not running: a notification
+   * refresh must never be the thing that starts a walk.
+   */
+  private fun handleUpdateNotification(intent: Intent) {
+    if (!isRunning) {
+      stopSelf()
+      return
+    }
+    notificationTitle = intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: notificationTitle
+    notificationBody = intent.getStringExtra(EXTRA_NOTIFICATION_BODY) ?: notificationBody
+    updateNotification()
+  }
+
   private fun handleStart(intent: Intent) {
     notificationTitle = intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: notificationTitle
     notificationBody = intent.getStringExtra(EXTRA_NOTIFICATION_BODY) ?: notificationBody
+
+    // A second START on a live service would re-register the location request
+    // and reset the walk counters. Refresh the notification and leave the
+    // recording exactly as it is.
+    if (isRunning) {
+      updateNotification()
+      return
+    }
 
     startAsForeground()
 

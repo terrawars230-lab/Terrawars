@@ -63,6 +63,30 @@ jest.mock('@react-native-community/netinfo', () => ({
 
 jest.mock('react-native-permissions', () => require('react-native-permissions/mock'));
 
+// react-native-svg has no shipped Jest mock and its components reach for a
+// native view manager. Icons are decorative, so a plain View keeps the tree
+// renderable while preserving the accessibility props a test might assert on.
+jest.mock('react-native-svg', () => {
+  const React = require('react');
+  const {View} = require('react-native');
+  const Shape = (props: Record<string, unknown>) => React.createElement(View, props);
+  return {
+    __esModule: true,
+    default: Shape,
+    Svg: Shape,
+    Path: Shape,
+    Circle: Shape,
+    Rect: Shape,
+    G: Shape,
+    Line: Shape,
+    Polygon: Shape,
+    Polyline: Shape,
+    Defs: Shape,
+    LinearGradient: Shape,
+    Stop: Shape,
+  };
+});
+
 jest.mock('react-native-maps', () => {
   const React = require('react');
   const {View} = require('react-native');

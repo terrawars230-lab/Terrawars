@@ -8,6 +8,7 @@
 export {Button, type ButtonProps, type ButtonSize, type ButtonVariant} from './Button';
 export {EmptyState, type EmptyStateProps} from './EmptyState';
 export {ErrorBoundary} from './ErrorBoundary';
+export {Icon, type IconName, type IconProps} from './icons/Icon';
 export {Loader, type LoaderProps} from './Loader';
 export {Screen, screenStyles, type ScreenProps} from './Screen';
 export {Text, type TextProps} from './Text';

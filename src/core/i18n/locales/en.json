@@ -105,7 +105,9 @@
     "emptyTitle": "No territory here yet",
     "emptyBody": "Be the first to walk a loop around this area.",
     "loadFailed": "Couldn't load the map. Check your connection.",
-    "areaTooLarge": "Zoom in to load territory."
+    "areaTooLarge": "Zoom in to load territory.",
+    "locationOff": "Location is off — tap to turn it on",
+    "locationOffHint": "Opens the location permission screen"
   },
 
   "parcel": {
@@ -146,7 +148,10 @@
     "autoEndedDuration": "Walk ended — you passed the {{duration}} limit.",
     "gpsWeak": "Weak GPS signal",
     "submitting": "Working out your claim…",
-    "queuedOffline": "Saved. We'll claim this as soon as you're online."
+    "queuedOffline": "Saved. We'll claim this as soon as you're online.",
+    "waitingForGps": "Finding your position…",
+    "waitingForGpsHint": "Step outside if you can — this usually takes a few seconds.",
+    "yourPosition": "Your position"
   },
 
   "claimResult": {
@@ -189,7 +194,13 @@
     "INTERNAL": "Something went wrong on our side. Try again in a moment.",
     "NETWORK_UNAVAILABLE": "No connection. Check your network and try again.",
     "TIMEOUT": "That took too long. Try again.",
-    "UNKNOWN": "Something went wrong. Try again."
+    "UNKNOWN": "Something went wrong. Try again.",
+    "INVALID_CREDENTIALS": "That email and password don't match an account.",
+    "EMAIL_NOT_CONFIRMED": "Check your inbox and confirm your email address first.",
+    "EMAIL_ALREADY_REGISTERED": "An account already uses that email. Try signing in instead.",
+    "WEAK_PASSWORD": "Pick a stronger password — at least 8 characters.",
+    "SIGNUP_DISABLED": "New accounts aren't being accepted right now.",
+    "EMAIL_RATE_LIMITED": "Too many confirmation emails have gone out. Wait an hour and try again."
   },
 
   "leaderboard": {

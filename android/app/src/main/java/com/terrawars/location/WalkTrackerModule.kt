@@ -131,18 +131,34 @@ class WalkTrackerModule(
     }
   }
 
-  /** Updates the persistent notification with live distance and duration (FR-11). */
+  /**
+   * Updates the persistent notification with live distance and duration (FR-11).
+   *
+   * ACTION_UPDATE_NOTIFICATION, never ACTION_START. This fires every ten
+   * seconds while the HUD ticks; sending START re-registered the location
+   * request, cleared the paused flag and zeroed the sample counter on every
+   * tick, which is what made a paused walk resume itself and the live pace
+   * readout jump around.
+   */
   @ReactMethod
   fun updateNotification(title: String, body: String, promise: Promise) {
+    // Only meaningful while the service is already up; starting a dead service
+    // to refresh text would begin tracking without the user asking.
+    if (!WalkTrackingService.isRunning) {
+      promise.resolve(null)
+      return
+    }
+
     val intent = Intent(reactContext, WalkTrackingService::class.java).apply {
-      action = WalkTrackingService.ACTION_START
+      action = WalkTrackingService.ACTION_UPDATE_NOTIFICATION
       putExtra(WalkTrackingService.EXTRA_NOTIFICATION_TITLE, title)
       putExtra(WalkTrackingService.EXTRA_NOTIFICATION_BODY, body)
     }
-    // Only meaningful while the service is already up; a start on a dead
-    // service would begin tracking without the user asking.
-    if (WalkTrackingService.isRunning) {
+
+    try {
       reactContext.startService(intent)
+    } catch (error: Exception) {
+      // A notification refresh is cosmetic and must never fail a walk.
     }
     promise.resolve(null)
   }

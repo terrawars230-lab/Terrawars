@@ -15,6 +15,14 @@ export const StorageKeys = {
   safetyNoticeAcknowledged: 'onboarding.safety.v1',
   /** Whether the OEM battery-settings guidance has been shown (doc 06 §8.2). */
   batteryGuidanceShown: 'onboarding.battery.v1',
+  /**
+   * Whether the motion/activity permission has ever been requested.
+   *
+   * doc 06 §2 makes a motion denial a soft anti-cheat flag, never a blocked
+   * walk — so re-prompting on every walk start is friction that buys nothing.
+   * Asked once, then never again from the app.
+   */
+  motionPermissionAsked: 'permissions.motionAsked.v1',
 
   /** Cached `game_config` snapshot, so a cold offline start still has tunables. */
   gameConfig: 'game.config.v1',

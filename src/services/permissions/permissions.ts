@@ -13,6 +13,8 @@ import {
 } from 'react-native-permissions';
 
 import {createLogger} from '@core/logger/logger';
+import {storage} from '@core/storage/storage';
+import {StorageKeys} from '@core/storage/storageKeys';
 
 /**
  * Runtime permissions (doc 06 §5).
@@ -96,6 +98,29 @@ export async function requestMotionPermission(): Promise<PermissionOutcome> {
     logger.warn('Motion permission is unavailable on this device');
     return 'unavailable';
   }
+}
+
+/**
+ * Requests motion at most once in the app's lifetime.
+ *
+ * The walk flow runs before every walk, and a system dialog on every walk start
+ * is the kind of friction that gets an app uninstalled. Because a denial is
+ * only ever a soft flag (doc 06 §2), asking again buys nothing: a user who said
+ * no once is not going to be talked round by the same dialog on Tuesday.
+ *
+ * Already-granted is not re-requested either — `request()` on a granted
+ * permission returns immediately, but going near it costs a bridge round trip
+ * on a screen that is trying to start recording.
+ */
+export async function requestMotionPermissionOnce(): Promise<PermissionOutcome> {
+  if (storage.getBoolean(StorageKeys.motionPermissionAsked) === true) {
+    return check(MOTION_PERMISSION).then(toOutcome).catch(() => 'unavailable' as const);
+  }
+
+  const outcome = await requestMotionPermission();
+  // Written whatever the answer — the point is that we asked, not what was said.
+  storage.setBoolean(StorageKeys.motionPermissionAsked, true);
+  return outcome;
 }
 
 /** FR-70/FR-72: Android 13+ needs an explicit notification permission. */

@@ -19,6 +19,65 @@ const logger = createLogger('api');
 
 const apiErrorCodeSet: ReadonlySet<string> = new Set(API_ERROR_CODES);
 
+/**
+ * GoTrue error codes → our codes.
+ *
+ * Supabase Auth reports a stable machine `code` on every failure. Collapsing
+ * them all into `ERR_VALIDATION` — which this used to do — turns "you have hit
+ * the 2-emails-per-hour limit on the built-in mailer" into "Something in that
+ * request didn't look right", and leaves the user with no idea what to do.
+ * Every entry below has a specific, actionable message in `errors.*`.
+ *
+ * https://supabase.com/docs/guides/auth/debugging/error-codes
+ */
+const AUTH_CODE_MAP: Readonly<Record<string, ErrorCode>> = {
+  invalid_credentials: 'INVALID_CREDENTIALS',
+  email_not_confirmed: 'EMAIL_NOT_CONFIRMED',
+  user_already_exists: 'EMAIL_ALREADY_REGISTERED',
+  email_exists: 'EMAIL_ALREADY_REGISTERED',
+  weak_password: 'WEAK_PASSWORD',
+  signup_disabled: 'SIGNUP_DISABLED',
+  email_provider_disabled: 'SIGNUP_DISABLED',
+  over_email_send_rate_limit: 'EMAIL_RATE_LIMITED',
+  over_request_rate_limit: 'RATE_LIMITED',
+  over_sms_send_rate_limit: 'RATE_LIMITED',
+  validation_failed: 'ERR_VALIDATION',
+  bad_json: 'ERR_VALIDATION',
+  session_expired: 'UNAUTHENTICATED',
+  refresh_token_not_found: 'UNAUTHENTICATED',
+  no_authorization: 'UNAUTHENTICATED',
+  user_banned: 'ACCOUNT_SUSPENDED',
+};
+
+function fromAuthError(error: AuthError): ApiError {
+  // `code` is the stable machine identifier; `message` is prose that changes
+  // between releases, so it is never matched on and never shown.
+  const authCode = (error as AuthError & {code?: string}).code;
+  const mapped = authCode ? AUTH_CODE_MAP[authCode] : undefined;
+
+  const code: ErrorCode =
+    mapped ??
+    (error.status === 401
+      ? 'UNAUTHENTICATED'
+      : error.status === 429
+      ? 'RATE_LIMITED'
+      : error.status !== undefined && error.status >= 500
+      ? 'INTERNAL'
+      : 'ERR_VALIDATION');
+
+  if (!mapped && authCode) {
+    // An unmapped code still gets a sensible bucket from the status, but log it
+    // so the map can grow rather than silently degrading to generic copy.
+    logger.warn('Unmapped Supabase auth code', {authCode, status: error.status});
+  }
+
+  return new ApiError(code, error.message, {
+    httpStatus: error.status ?? null,
+    details: authCode ? {authCode} : {},
+    cause: error,
+  });
+}
+
 /** Postgres SQLSTATE codes we can translate into something meaningful. */
 const PG_CODE_MAP: Readonly<Record<string, ErrorCode>> = {
   '23505': 'USERNAME_TAKEN', // unique_violation
@@ -39,11 +98,7 @@ export function toApiError(error: unknown, fallbackMessage = 'Request failed'): 
   }
 
   if (error instanceof AuthError) {
-    return new ApiError(
-      error.status === 401 ? 'UNAUTHENTICATED' : 'ERR_VALIDATION',
-      error.message,
-      {httpStatus: error.status ?? null, cause: error},
-    );
+    return fromAuthError(error);
   }
 
   if (isPostgrestError(error)) {

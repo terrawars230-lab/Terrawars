@@ -5,7 +5,7 @@ import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {useQuery} from '@tanstack/react-query';
 import {useTranslation} from 'react-i18next';
 
-import {ErrorBoundary, Loader} from '@components/index';
+import {ErrorBoundary, Icon, Loader} from '@components/index';
 import {queryKeys} from '@core/constants/queryKeys';
 import {useTheme} from '@core/theme/ThemeProvider';
 import {ChooseUsernameScreen} from '@features/auth/screens/ChooseUsernameScreen';
@@ -25,6 +25,24 @@ import {ActiveWalkScreen} from '@features/walk/screens/ActiveWalkScreen';
 import {ClaimResultScreen} from '@features/walk/screens/ClaimResultScreen';
 
 import type {MainTabParamList, RootStackParamList} from './types';
+
+/**
+ * Tab icons, hoisted out of `MainTabs`.
+ *
+ * `tabBarIcon` is a render prop, so an inline arrow makes React see a new
+ * component type on every render of the navigator and remount the icon. The
+ * navigator passes the tint and size it has already resolved for the
+ * active/inactive state, so nothing here restates the theme.
+ */
+type TabIconProps = {color: string; size: number};
+
+const MapTabIcon = ({color, size}: TabIconProps) => <Icon name="map" color={color} size={size} />;
+const LeaderboardTabIcon = ({color, size}: TabIconProps) => (
+  <Icon name="trophy" color={color} size={size} />
+);
+const ProfileTabIcon = ({color, size}: TabIconProps) => (
+  <Icon name="user" color={color} size={size} />
+);
 
 /**
  * The navigation tree.
@@ -167,7 +185,10 @@ function MainTabs(): React.JSX.Element {
       }}>
       <Tabs.Screen
         name="MapTab"
-        options={{title: t('map.title')}}
+        options={{
+          title: t('map.title'),
+          tabBarIcon: MapTabIcon,
+        }}
         // Its own boundary for the same reason as the walk screen: the map is
         // the most complex renderer in the app and the most likely to throw.
         children={() => (
@@ -179,12 +200,18 @@ function MainTabs(): React.JSX.Element {
       <Tabs.Screen
         name="LeaderboardTab"
         component={LeaderboardScreen}
-        options={{title: t('leaderboard.title')}}
+        options={{
+          title: t('leaderboard.title'),
+          tabBarIcon: LeaderboardTabIcon,
+        }}
       />
       <Tabs.Screen
         name="ProfileTab"
         component={ProfileScreen}
-        options={{title: t('profile.title')}}
+        options={{
+          title: t('profile.title'),
+          tabBarIcon: ProfileTabIcon,
+        }}
       />
     </Tabs.Navigator>
   );

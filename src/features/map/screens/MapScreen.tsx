@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 import {Pressable, View} from 'react-native';
 
@@ -8,12 +8,14 @@ import {useTranslation} from 'react-i18next';
 import MapView, {Polygon as MapPolygon, PROVIDER_GOOGLE, type Region} from 'react-native-maps';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 
-import {Button, Screen, Text} from '@components/index';
+import {Button, Icon, Screen, Text} from '@components/index';
+import {LAUNCH_CITY, REGION_DELTA} from '@core/constants/mapDefaults';
 import {queryKeys} from '@core/constants/queryKeys';
 import {makeStyles, useTheme} from '@core/theme/ThemeProvider';
-import type {MapBounds} from '@core/types/geo';
+import type {LatLng, MapBounds} from '@core/types/geo';
 
 import {fetchParcelsInBounds, type ParcelFeature} from '../api/mapApi';
+import {useUserLocation} from '../hooks/useUserLocation';
 import {regionToBounds, regionToZoom} from '../utils/viewport';
 
 /**
@@ -32,10 +34,9 @@ import {regionToBounds, regionToZoom} from '../utils/viewport';
 
 /** Lahore — the OQ-3 launch city. Used until the first location fix arrives. */
 const INITIAL_REGION: Region = {
-  latitude: 31.5204,
-  longitude: 74.3587,
-  latitudeDelta: 0.02,
-  longitudeDelta: 0.02,
+  ...LAUNCH_CITY,
+  latitudeDelta: REGION_DELTA.city,
+  longitudeDelta: REGION_DELTA.city,
 };
 
 /** How long the map must be still before the viewport becomes a query. */
@@ -56,6 +57,15 @@ export function MapScreen(): React.JSX.Element {
     zoom: regionToZoom(INITIAL_REGION.longitudeDelta),
   }));
   const [showOnlyMine, setShowOnlyMine] = useState(false);
+
+  // Owns the permission state and the one-shot fixes. The map cannot show a
+  // blue dot without a live grant, and that grant is made on another screen.
+  const location = useUserLocation();
+
+  // The map jumps to the user exactly once, on the first fix of a session.
+  // After that the camera is theirs: re-centring under a pan is the single
+  // most irritating thing a map can do.
+  const hasCentredOnUser = useRef(false);
 
   const handleRegionChangeComplete = useCallback((region: Region) => {
     if (settleTimer.current) {
@@ -87,11 +97,62 @@ export function MapScreen(): React.JSX.Element {
     return showOnlyMine ? data.parcels.filter(parcel => parcel.isMine) : data.parcels;
   }, [data, showOnlyMine]);
 
+  const centreOn = useCallback(
+    (fix: LatLng) => {
+      mapRef.current?.animateToRegion(
+        {
+          latitude: fix.lat,
+          longitude: fix.lng,
+          // Tighter than the launch region: once we know where the user is,
+          // street level is the useful zoom, not city level.
+          latitudeDelta: REGION_DELTA.street,
+          longitudeDelta: REGION_DELTA.street,
+        },
+        theme.durations.normal,
+      );
+    },
+    [theme.durations.normal],
+  );
+
+  // The first fix of the session centres the map. `location.position` only
+  // changes when a fix actually lands, so this cannot fire on a re-render.
+  useEffect(() => {
+    if (location.position && !hasCentredOnUser.current) {
+      hasCentredOnUser.current = true;
+      centreOn(location.position);
+    }
+  }, [centreOn, location.position]);
+
+  const startWalk = useCallback(() => {
+    // Straight to the walk when the grant is already in hand. Routing through
+    // the rationale unconditionally is what made the app look like it was
+    // asking for location before every single walk — the disclosure exists to
+    // precede the system dialog (doc 06 §5), and there is no dialog left once
+    // permission has been granted.
+    if (location.availability === 'granted') {
+      navigation.navigate('ActiveWalk');
+      return;
+    }
+    // 'checking' lands here too, and the rationale screen short-circuits itself
+    // once its own check resolves.
+    navigation.navigate('LocationRationale', {returnTo: 'ActiveWalk'});
+  }, [location.availability, navigation]);
+
   const recentre = useCallback(() => {
-    // TODO(Phase 2): use locationTracker.getCurrentPosition() once the
-    // permission rationale flow is wired in front of it.
-    mapRef.current?.animateToRegion(INITIAL_REGION, theme.durations.normal);
-  }, [theme.durations.normal]);
+    // No permission yet — the FR-10 rationale is the only legitimate route to
+    // the system dialog (doc 06 §5), so send the user there rather than
+    // silently doing nothing.
+    if (location.availability === 'needs-permission' || location.availability === 'blocked') {
+      navigation.navigate('LocationRationale', {});
+      return;
+    }
+
+    void location.locate().then(fix => {
+      if (fix) {
+        centreOn(fix);
+      }
+    });
+  }, [centreOn, location, navigation]);
 
   return (
     <Screen edges={[]} bleed>
@@ -102,7 +163,12 @@ export function MapScreen(): React.JSX.Element {
         style={styles.map}
         initialRegion={INITIAL_REGION}
         onRegionChangeComplete={handleRegionChangeComplete}
-        showsUserLocation
+        // Only once the runtime grant is in hand. Setting it unconditionally is
+        // a silent no-op on Android without ACCESS_FINE_LOCATION, which reads
+        // to the user as "the app can't find me".
+        showsUserLocation={location.availability === 'granted'}
+        // Our own control replaces it, so the button matches the rest of the
+        // chrome and can route to the rationale when permission is missing.
         showsMyLocationButton={false}
         // The default POI layer competes with the parcels for attention, and
         // the parcels are the product.
@@ -142,38 +208,69 @@ export function MapScreen(): React.JSX.Element {
             </Text>
           </View>
         ) : null}
+
+        {/*
+          Without this the map is simply blank where the user expects to be,
+          with nothing saying why. Tapping routes to the FR-10 rationale, which
+          is the only screen allowed to raise the system dialog (doc 06 §5).
+        */}
+        {location.availability === 'needs-permission' ||
+        location.availability === 'blocked' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('map.locationOff')}
+            accessibilityHint={t('map.locationOffHint')}
+            onPress={() => navigation.navigate('LocationRationale', {})}
+            style={[styles.banner, styles.bannerRow]}>
+            <Icon name="alert" size={16} color="warning" />
+            <Text variant="caption" color="textSecondary">
+              {t('map.locationOff')}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
 
+      {/*
+        Controls and the start button share ONE bottom-anchored column.
+        They used to be two absolutely-positioned siblings with hand-computed
+        offsets, which put the round controls underneath the start button — and
+        would have broken again at any other button height, which NFR-10's 200%
+        font scaling guarantees will happen.
+      */}
       <View
-        style={[styles.controls, {bottom: insets.bottom + theme.spacing.xxxl}]}
+        style={[styles.bottomDock, {paddingBottom: insets.bottom + theme.spacing.md}]}
         pointerEvents="box-none">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={showOnlyMine ? t('map.showEveryone') : t('map.showOnlyMine')}
-          accessibilityState={{selected: showOnlyMine}}
-          onPress={() => setShowOnlyMine(current => !current)}
-          style={styles.controlButton}>
-          <Text variant="caption" color={showOnlyMine ? 'accent' : 'textSecondary'}>
-            {showOnlyMine ? t('map.showEveryone') : t('map.showOnlyMine')}
-          </Text>
-        </Pressable>
+        <View style={styles.controls} pointerEvents="box-none">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showOnlyMine ? t('map.showEveryone') : t('map.showOnlyMine')}
+            accessibilityState={{selected: showOnlyMine}}
+            onPress={() => setShowOnlyMine(current => !current)}
+            style={styles.controlButton}>
+            <Icon name="layers" size={22} color={showOnlyMine ? 'accent' : 'textSecondary'} />
+          </Pressable>
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('map.recenter')}
-          onPress={recentre}
-          style={styles.controlButton}>
-          <Text variant="caption" color="textSecondary">
-            {t('map.recenter')}
-          </Text>
-        </Pressable>
-      </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('map.recenter')}
+            accessibilityState={{busy: location.isLocating}}
+            onPress={recentre}
+            style={styles.controlButton}>
+            <Icon
+              name="crosshair"
+              size={22}
+              // Dimmed while there is no permission, so the control reads as
+              // "not ready" rather than broken when it opens the rationale.
+              color={location.availability === 'granted' ? 'textSecondary' : 'textTertiary'}
+            />
+          </Pressable>
+        </View>
 
-      <View style={[styles.startBar, {paddingBottom: insets.bottom + theme.spacing.md}]}>
         <Button
           label={t('walk.start')}
+          icon={<Icon name="walk" size={20} color="onAccent" />}
           loading={isLoading && parcels.length === 0}
-          onPress={() => navigation.navigate('LocationRationale', {returnTo: 'ActiveWalk'})}
+          onPress={startWalk}
         />
       </View>
     </Screen>
@@ -227,9 +324,23 @@ const useStyles = makeStyles(theme => ({
     paddingVertical: theme.spacing.sm,
     alignItems: 'center',
   },
-  controls: {
+  bannerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: theme.spacing.sm,
+    minHeight: theme.layout.minTouchTarget,
+  },
+  bottomDock: {
     position: 'absolute',
+    left: theme.spacing.lg,
     right: theme.spacing.lg,
+    bottom: 0,
+    gap: theme.spacing.md,
+  },
+  controls: {
+    // Right-aligned above the full-width start button, so the column reads as
+    // one stack rather than two things that happen to be near each other.
+    alignSelf: 'flex-end',
     gap: theme.spacing.sm,
   },
   controlButton: {
@@ -240,11 +351,5 @@ const useStyles = makeStyles(theme => ({
     backgroundColor: theme.colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  startBar: {
-    position: 'absolute',
-    left: theme.spacing.lg,
-    right: theme.spacing.lg,
-    bottom: 0,
   },
 }));

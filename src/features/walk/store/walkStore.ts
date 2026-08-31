@@ -5,7 +5,12 @@ import {createLogger} from '@core/logger/logger';
 import {storage} from '@core/storage/storage';
 import {StorageKeys} from '@core/storage/storageKeys';
 import type {GpsSample, LatLng} from '@core/types/geo';
-import {buildClaimPreview, haversineDistanceM, type ClaimPreview} from '@geo/index';
+import {
+  buildClaimPreview,
+  haversineDistanceM,
+  JITTER_THRESHOLD_M,
+  type ClaimPreview,
+} from '@geo/index';
 
 /**
  * The in-progress walk.
@@ -49,6 +54,25 @@ interface WalkState {
   distanceM: number;
   uploadedThroughSeq: number;
 
+  /**
+   * Last sample that actually moved `distanceM`.
+   *
+   * The HUD distance is measured against this, not against the previous raw
+   * sample, so a fix rejected as jitter or as a teleport does not become
+   * distance the user never walked (GR-01 steps 1, 4 and 5).
+   */
+  distanceAnchor: GpsSample | null;
+
+  /**
+   * `(timestamp, cumulative distance)` marks inside the rolling pace window.
+   *
+   * One is pushed for every sample that passes the accuracy gate, moved or
+   * not — a standing-still sample pushes a mark with an unchanged distance,
+   * which is what makes the pace decay to zero instead of freezing at whatever
+   * it read when the user stopped.
+   */
+  paceMarks: {t: number; d: number}[];
+
   /** Advisory preview, recomputed as the path grows (FR-14). */
   preview: ClaimPreview | null;
   config: GameConfig;
@@ -69,6 +93,14 @@ interface WalkState {
   pendingSamples: () => GpsSample[];
   /** Elapsed walk time in seconds, excluding paused time (FR-16). */
   elapsedSeconds: () => number;
+  /**
+   * Live speed over the last PACE_WINDOW_MS, in m/s.
+   *
+   * A whole-walk average is not a pace: it is dragged down for minutes by the
+   * dead time before the first fix, and it barely moves when the user actually
+   * speeds up or stops. The HUD wants the recent window.
+   */
+  recentSpeedMps: () => number;
   /** The path as plain coordinates, for the map polyline (FR-13). */
   pathCoordinates: () => LatLng[];
 
@@ -87,6 +119,22 @@ interface WalkState {
  */
 const PREVIEW_EVERY_N_SAMPLES = 4;
 
+/**
+ * The window the live pace is measured over.
+ *
+ * Thirty seconds is long enough that a single noisy fix cannot swing the
+ * readout and short enough that stopping at a crossing shows up within a few
+ * seconds rather than at the end of the walk.
+ */
+const PACE_WINDOW_MS = 30_000;
+
+/**
+ * The pace readout stays blank until the window holds this much time. Dividing
+ * a couple of metres by a couple of seconds produces a sprint, which is exactly
+ * the "random speed" a user notices in the first moments of a walk.
+ */
+const PACE_MIN_SPAN_MS = 8_000;
+
 export const useWalkStore = create<WalkState>((set, get) => ({
   phase: 'idle',
   walkId: null,
@@ -98,6 +146,8 @@ export const useWalkStore = create<WalkState>((set, get) => ({
   samples: [],
   distanceM: 0,
   uploadedThroughSeq: -1,
+  distanceAnchor: null,
+  paceMarks: [],
 
   preview: null,
   config: DEFAULT_GAME_CONFIG,
@@ -114,6 +164,8 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       samples: [],
       distanceM: 0,
       uploadedThroughSeq: -1,
+      distanceAnchor: null,
+      paceMarks: [],
       preview: null,
       canClaim: false,
     });
@@ -130,15 +182,14 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       return;
     }
 
-    const previous = state.samples[state.samples.length - 1];
     const sample: GpsSample = {...incoming, seq: state.samples.length};
 
-    // Running distance uses the RAW path so the HUD keeps ticking while the
-    // user walks. GR-01's cleaning runs inside the preview, and the server
-    // recomputes both from scratch.
-    const stepM = previous ? haversineDistanceM(previous, sample) : 0;
+    // EVERY sample is kept and uploaded, however poor — the server re-cleans
+    // the raw path and its verdict is the only one that counts (D-05). What
+    // follows decides only what the HUD is allowed to *show*.
     const samples = [...state.samples, sample];
-    const distanceM = state.distanceM + stepM;
+
+    const {distanceM, distanceAnchor, paceMarks} = measure(state, sample);
 
     const shouldRecompute = samples.length % PREVIEW_EVERY_N_SAMPLES === 0;
     const preview = shouldRecompute ? buildClaimPreview(samples, state.config) : state.preview;
@@ -146,6 +197,8 @@ export const useWalkStore = create<WalkState>((set, get) => ({
     set({
       samples,
       distanceM,
+      distanceAnchor,
+      paceMarks,
       preview,
       canClaim: preview?.valid ?? false,
     });
@@ -187,6 +240,8 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       samples: [],
       distanceM: 0,
       uploadedThroughSeq: -1,
+      distanceAnchor: null,
+      paceMarks: [],
       preview: null,
       canClaim: false,
     });
@@ -215,6 +270,29 @@ export const useWalkStore = create<WalkState>((set, get) => ({
     return Math.max(0, Math.floor((Date.now() - startedAt - pausedSoFar) / 1000));
   },
 
+  recentSpeedMps: () => {
+    const {paceMarks, phase} = get();
+
+    // A paused walk has no speed; showing the last one would be a lie.
+    if (phase !== 'recording' || paceMarks.length < 2) {
+      return 0;
+    }
+
+    const first = paceMarks[0]!;
+    const last = paceMarks[paceMarks.length - 1]!;
+    const spanMs = last.t - first.t;
+
+    if (spanMs < PACE_MIN_SPAN_MS) {
+      return 0;
+    }
+
+    // Measured to the newest mark rather than to `Date.now()`: a gap in the
+    // fixes (a tunnel, a dropped service) must not be read as standing still.
+    // Samples arrive at least every WALK_LIMITS.samplingMaxIntervalMs, so the
+    // window is never more than one interval stale.
+    return Math.max(0, (last.d - first.d) / (spanMs / 1000));
+  },
+
   pathCoordinates: () => get().samples.map(({lat, lng}) => ({lat, lng})),
 
   restoreFromDisk: () => {
@@ -237,6 +315,72 @@ export const useWalkStore = create<WalkState>((set, get) => ({
   },
 }));
 
+/** What one sample does to the HUD readouts. */
+interface Measurement {
+  distanceM: number;
+  distanceAnchor: GpsSample | null;
+  paceMarks: {t: number; d: number}[];
+}
+
+/**
+ * Decides whether a sample is allowed to move the distance readout.
+ *
+ * This mirrors GR-01 steps 1, 3, 4 and 5 — the same gates the server's cleaning
+ * pass applies — rather than summing the raw path. Summing raw was the bug
+ * behind two symptoms users actually report: distance that climbs while the
+ * phone sits still on a table, and a pace derived from it that reads as random.
+ * A consumer GPS wanders several metres between fixes even at a standstill, and
+ * at one fix every five seconds that is a few hundred metres of imaginary walk
+ * per hour.
+ *
+ * It stays deliberately cheaper than `cleanSamples`: one comparison against the
+ * anchor, no re-sort and no re-scan of the whole path, because it runs on every
+ * sample for up to four hours (FR-19).
+ */
+function measure(state: WalkState, sample: GpsSample): Measurement {
+  const {config} = state;
+  let {distanceM, distanceAnchor} = state;
+
+  // GR-01(1) and (2): a fix worse than the accuracy gate, or one from a mock
+  // provider, tells us nothing about where the user is. It is still recorded
+  // and uploaded — it just does not get to move the number on screen.
+  const trustworthy =
+    !sample.isMock && (sample.accuracyM === null || sample.accuracyM <= config.maxAccuracyM);
+
+  if (!trustworthy) {
+    return {distanceM, distanceAnchor, paceMarks: state.paceMarks};
+  }
+
+  if (!distanceAnchor) {
+    distanceAnchor = sample;
+  } else {
+    const stepM = haversineDistanceM(distanceAnchor, sample);
+    const elapsedS = (sample.timestamp - distanceAnchor.timestamp) / 1000;
+    // GR-01(3): a duplicate timestamp yields an infinite speed and is dropped
+    // by the burst check below, which is the behaviour we want.
+    const stepSpeedMps = elapsedS > 0 ? stepM / elapsedS : Number.POSITIVE_INFINITY;
+
+    if (stepSpeedMps > config.maxBurstSpeedMps) {
+      // GR-01(5): a teleport. Drop it and keep the anchor where it was, so the
+      // next good fix re-links from the last place we believed.
+      logger.debug('Dropped a teleport from the HUD readout', {stepM, stepSpeedMps});
+    } else if (stepM >= JITTER_THRESHOLD_M) {
+      // GR-01(4): below the jitter floor this is noise, not walking.
+      distanceM += stepM;
+      distanceAnchor = sample;
+    }
+  }
+
+  // A mark for every trustworthy sample, moved or not — see `paceMarks`.
+  const marks = [...state.paceMarks, {t: sample.timestamp, d: distanceM}];
+  const cutoff = sample.timestamp - PACE_WINDOW_MS;
+  // Keep one mark at or before the cutoff so the window always spans it.
+  const firstInWindow = marks.findIndex(mark => mark.t >= cutoff);
+  const paceMarks = firstInWindow > 0 ? marks.slice(firstInWindow - 1) : marks;
+
+  return {distanceM, distanceAnchor, paceMarks};
+}
+
 /**
  * Adopts a walk recovered from disk (FR-15's "resume" branch).
  *
@@ -245,9 +389,11 @@ export const useWalkStore = create<WalkState>((set, get) => ({
  * leave the two permanently out of step.
  */
 export function adoptRestoredWalk(restored: PersistedWalk, config: GameConfig): void {
-  let distanceM = 0;
-  for (let i = 1; i < restored.samples.length; i++) {
-    distanceM += haversineDistanceM(restored.samples[i - 1]!, restored.samples[i]!);
+  // Replayed through `measure` rather than summed raw, so a resumed walk shows
+  // the same distance it would have shown had it never been interrupted.
+  let running: Measurement = {distanceM: 0, distanceAnchor: null, paceMarks: []};
+  for (const sample of restored.samples) {
+    running = measure({...useWalkStore.getState(), ...running, config}, sample);
   }
 
   const preview = buildClaimPreview(restored.samples, config);
@@ -260,7 +406,9 @@ export function adoptRestoredWalk(restored: PersistedWalk, config: GameConfig): 
     pausedMs: restored.pausedMs,
     pausedAt: Date.now(),
     samples: restored.samples,
-    distanceM,
+    distanceM: running.distanceM,
+    distanceAnchor: running.distanceAnchor,
+    paceMarks: running.paceMarks,
     uploadedThroughSeq: restored.uploadedThroughSeq,
     preview,
     canClaim: preview.valid,

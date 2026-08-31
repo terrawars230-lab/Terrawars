@@ -51,6 +51,12 @@ export interface UseWalkRecorder {
 export function useWalkRecorder(options?: {
   onAutoEnd?: (reason: 'distance' | 'duration') => void;
   onTrackerStopped?: (reason: TrackingStopReason) => void;
+  /**
+   * The platform is reporting a poor fix (doc 06 §8.3). Drives the "weak GPS"
+   * hint, so a user watching a stalled distance readout is told why rather
+   * than left to conclude the app is broken.
+   */
+  onAccuracyDegraded?: (accuracyM: number) => void;
 }): UseWalkRecorder {
   const {t} = useTranslation();
   const uploadTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -91,10 +97,15 @@ export function useWalkRecorder(options?: {
       logger.error('Location error during a walk', new Error(message));
     });
 
+    const unsubscribeAccuracy = locationTracker.on('accuracyDegraded', accuracyM => {
+      callbacks.current?.onAccuracyDegraded?.(accuracyM);
+    });
+
     return () => {
       unsubscribeSample();
       unsubscribeStopped();
       unsubscribeError();
+      unsubscribeAccuracy();
     };
   }, []);
 

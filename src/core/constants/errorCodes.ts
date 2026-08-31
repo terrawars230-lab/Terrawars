@@ -33,6 +33,14 @@ export const API_ERROR_CODES = [
   'WALK_ALREADY_FINISHED',
   'COLOR_CHANGE_COOLDOWN',
   'RATE_LIMITED',
+  // Supabase Auth outcomes. Each has specific, actionable copy in errors.* —
+  // the whole point of mapping them individually (see AUTH_CODE_MAP).
+  'INVALID_CREDENTIALS',
+  'EMAIL_NOT_CONFIRMED',
+  'EMAIL_ALREADY_REGISTERED',
+  'WEAK_PASSWORD',
+  'SIGNUP_DISABLED',
+  'EMAIL_RATE_LIMITED',
   'INTERNAL',
   'NETWORK_UNAVAILABLE',
   'TIMEOUT',
