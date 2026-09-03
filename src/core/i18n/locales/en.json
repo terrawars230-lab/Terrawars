@@ -27,12 +27,17 @@
   },
 
   "onboarding": {
-    "step1Title": "Walk a loop",
-    "step1Body": "Start a walk and take any route you like — as long as you come back around.",
-    "step2Title": "Close the loop",
-    "step2Body": "When your path crosses itself or returns near the start, the ground inside becomes yours.",
-    "step3Title": "Hold your ground",
-    "step3Body": "Other players can walk into your land and take it. New territory is protected for {{hours}} hours.",
+    "step1Title": "Claim real ground",
+    "step1Body": "Walk a loop outside and the land you enclose becomes your territory on the shared map.",
+    "step2Title": "Defend it or lose it",
+    "step2Body": "A rival who walks through your territory cuts away everything their loop encloses.",
+    "step3Title": "Climb the leaderboard",
+    "step3Body": "You're scored on total area owned — ranked globally, weekly, and across your city.",
+    "diagramYours": "Your land",
+    "diagramRival": "Rival loop",
+    "diagramA11y": "Two overlapping shapes: your territory, and a rival's walking loop cutting away the part of it their loop encloses.",
+    "previewYou": "you",
+    "goToStep": "Step {{step}} of {{total}}",
     "getStarted": "Get started",
     "skip": "Skip"
   },
@@ -107,7 +112,14 @@
     "loadFailed": "Couldn't load the map. Check your connection.",
     "areaTooLarge": "Zoom in to load territory.",
     "locationOff": "Location is off — tap to turn it on",
-    "locationOffHint": "Opens the location permission screen"
+    "locationOffHint": "Opens the location permission screen",
+    "heldAndRank": "{{area}} held · #{{rank}}",
+    "weeklyContract": "Weekly contract",
+    "contractProgress": "{{gained}} / {{goal}}",
+    "weeklyContractA11y": "This week's goal: {{progress}}",
+    "raid": "Raid",
+    "raidTargetTitle": "{{username}} is exposed",
+    "raidTargetDetail": "{{area}} · {{distance}} from you"
   },
 
   "parcel": {

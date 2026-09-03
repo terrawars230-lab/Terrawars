@@ -43,6 +43,14 @@ export interface GameConfig {
   minParcelAreaM2: number;
   /** GR-21: own parcels closer than this are merged. */
   mergeGapM: number;
+  /**
+   * FR-61: the weekly goal the map HUD shows progress against.
+   *
+   * Presentation, not a game rule — nothing rejects a claim for missing it. It
+   * is here rather than a literal because the number is exactly the kind doc 07
+   * expects to retune weekly once real walk distances are known (rule 7).
+   */
+  weeklyContractTargetM2: number;
 }
 
 export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = Object.freeze({
@@ -60,6 +68,7 @@ export const DEFAULT_GAME_CONFIG: Readonly<GameConfig> = Object.freeze({
   protectionHours: 6,
   minParcelAreaM2: 100,
   mergeGapM: 2,
+  weeklyContractTargetM2: 5_000,
 });
 
 /**
@@ -100,4 +109,5 @@ export const GAME_CONFIG_KEY_MAP: Readonly<Record<string, keyof GameConfig>> = O
   PROTECTION_HOURS: 'protectionHours',
   MIN_PARCEL_AREA_M2: 'minParcelAreaM2',
   MERGE_GAP_M: 'mergeGapM',
+  WEEKLY_CONTRACT_TARGET_M2: 'weeklyContractTargetM2',
 });

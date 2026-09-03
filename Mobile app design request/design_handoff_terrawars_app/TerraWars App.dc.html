@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="./nocturne-styles.css">
+<script src="./image-slot.js"></script>
+<style>
+  body{margin:0;background:#0c0d14}
+  @keyframes tw-spin{to{transform:rotate(360deg)}}
+  @keyframes tw-pulse{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.12)}}
+  @keyframes tw-rise{0%{transform:translateY(0);opacity:1}100%{transform:translateY(-160px);opacity:0}}
+  @keyframes tw-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  a{color:var(--color-accent)}
+  a:hover{color:var(--color-accent-2)}
+</style>
+</helmet>
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402,874" dark="{{ true }}" style="margin:32px auto;display:block">
+
+<div style="width:100%;height:100%;display:flex;flex-direction:column;position:relative;overflow:hidden;background:{{ appBg }};color:var(--color-text);font-family:var(--font-body)">
+
+<sc-if value="{{ isOnboarding }}" hint-placeholder-val="{{ true }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;background:var(--color-bg)">
+  <div style="height:54px;position:relative;z-index:3"></div>
+  <div style="display:flex;justify-content:flex-end;padding:0 20px;position:relative;z-index:3">
+    <button type="button" class="btn btn-ghost" onClick="{{ skipOnboarding }}">Skip</button>
+  </div>
+
+  <sc-if value="{{ isOnboard1 }}" hint-placeholder-val="{{ true }}">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;padding:0 30px 6px">
+    <div class="lighten" style="position:absolute;top:0;left:0;right:0;height:54%;overflow:hidden;pointer-events:none">
+      <img src="./assets/photo.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+    </div>
+    <div style="position:absolute;top:0;left:0;right:0;height:54%;background:linear-gradient(180deg, rgba(22,24,38,0) 28%, var(--color-bg) 100%);pointer-events:none"></div>
+    <div style="position:relative;display:flex;flex-direction:column;gap:10px">
+      <div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent)">TerraWars</div>
+      <h1 style="font-size:30px;margin:0;line-height:1.15;text-wrap:pretty">Claim real ground</h1>
+      <p style="margin:0;font-size:15px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 70%, transparent);text-wrap:pretty">Walk a loop outside and the land you enclose becomes your territory on the shared map.</p>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isOnboard2 }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px;padding:0 30px">
+    <div style="height:196px;position:relative">
+      <div style="position:absolute;inset:0;opacity:.5;border-radius:14px;overflow:hidden;background-image:repeating-linear-gradient(0deg, transparent 0 32px, rgba(255,255,255,.05) 32px 33px),repeating-linear-gradient(90deg, transparent 0 32px, rgba(255,255,255,.05) 32px 33px)"></div>
+      <svg viewBox="0 0 300 196" width="100%" height="100%" style="position:relative">
+        <polygon points="24,34 176,16 208,132 52,166" fill="#3B82F6" fill-opacity="0.26" stroke="#3B82F6" stroke-width="2"></polygon>
+        <polygon points="140,74 286,52 296,178 152,190" fill="var(--color-accent-800)" fill-opacity="0.6" stroke="var(--color-accent)" stroke-width="2" stroke-dasharray="7 5"></polygon>
+        <path d="M140 74 L152 190" stroke="var(--color-accent)" stroke-width="3"></path>
+        <circle cx="140" cy="74" r="4.5" fill="var(--color-accent)"></circle>
+        <circle cx="152" cy="190" r="4.5" fill="var(--color-accent)"></circle>
+      </svg>
+    </div>
+    <div style="display:flex;gap:18px">
+      <div style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">
+        <span style="width:9px;height:9px;border-radius:99px;background:#3B82F6"></span>Your land
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;font-size:11.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">
+        <span style="width:9px;height:9px;border-radius:99px;background:var(--color-accent)"></span>Rival loop
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <h1 style="font-size:30px;margin:0;line-height:1.15;text-wrap:pretty">Defend it or lose it</h1>
+      <p style="margin:0;font-size:15px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 70%, transparent);text-wrap:pretty">A rival who walks through your territory cuts away everything their loop encloses.</p>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isOnboard3 }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:26px;padding:0 30px">
+    <div style="display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ onboardPreviewRows }}" as="row" hint-placeholder-count="4">
+        <div style="display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:10px;background:{{ row.bg }};border:{{ row.border }}">
+          <div style="width:18px;font-size:12.5px;font-weight:600;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ row.rank }}</div>
+          <div style="width:10px;height:10px;border-radius:99px;flex:none;background:{{ row.colorHex }}"></div>
+          <div style="flex:1;font-size:13.5px">{{ row.username }}</div>
+          <div style="font-size:12.5px;font-weight:600;color:color-mix(in srgb, var(--color-text) 75%, transparent)">{{ row.areaLabel }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <h1 style="font-size:30px;margin:0;line-height:1.15;text-wrap:pretty">Climb the leaderboard</h1>
+      <p style="margin:0;font-size:15px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 70%, transparent);text-wrap:pretty">You're scored on total area owned — ranked globally, weekly, and across your city.</p>
+    </div>
+  </div>
+  </sc-if>
+  <div style="display:flex;justify-content:center;gap:7px;padding-bottom:18px;position:relative">
+    <sc-for list="{{ onboardDots }}" as="dot" hint-placeholder-count="3">
+      <div onClick="{{ dot.go }}" style="width:{{ dot.size }};height:6px;border-radius:99px;background:{{ dot.color }};transition:all .2s;cursor:pointer"></div>
+    </sc-for>
+  </div>
+  <div style="padding:0 24px 28px">
+    <button type="button" class="btn btn-primary btn-block" onClick="{{ nextOnboarding }}" style="height:52px;font-size:16px">{{ onboardCta }}</button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isAuth }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:64px 24px 32px;overflow:auto">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:28px">
+    <div style="width:52px;height:52px;border-radius:16px;background:var(--color-accent-800);border:1.5px solid var(--color-accent);display:flex;align-items:center;justify-content:center">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Z"></path><circle cx="12" cy="11" r="2"></circle></svg>
+    </div>
+    <div style="font-size:20px;font-family:var(--font-heading)">TerraWars</div>
+  </div>
+
+  <div class="seg" style="width:100%;margin-bottom:22px">
+    <label class="seg-opt" style="flex:1;justify-content:center">
+      <input type="radio" name="authmode" checked="{{ isSignup }}" onChange="{{ setSignup }}"><div class="dot" style="display:none"></div>Sign up
+    </label>
+    <label class="seg-opt" style="flex:1;justify-content:center">
+      <input type="radio" name="authmode" checked="{{ isSignin }}" onChange="{{ setSignin }}"><div class="dot" style="display:none"></div>Sign in
+    </label>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <div class="field">
+      <label>Email</label>
+      <input class="input" type="email" placeholder="you@example.com">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input class="input" type="password" placeholder="••••••••">
+    </div>
+    <button type="button" class="btn btn-primary btn-block" onClick="{{ submitAuth }}" style="height:48px;margin-top:4px">{{ authCta }}</button>
+  </div>
+
+  <div class="hr"></div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <button type="button" class="btn btn-secondary btn-block" style="height:46px;justify-content:flex-start;padding-left:16px;gap:10px">
+      <span style="width:20px;height:20px;border-radius:99px;background:var(--color-neutral-200);color:var(--color-bg);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">G</span>
+      Continue with Google
+    </button>
+    <button type="button" class="btn btn-secondary btn-block" style="height:46px;justify-content:flex-start;padding-left:16px;gap:10px">
+      <span style="width:20px;height:20px;border-radius:99px;background:var(--color-neutral-200);color:var(--color-bg);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center">A</span>
+      Continue with Apple
+    </button>
+  </div>
+
+  <p style="text-align:center;font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:22px">By continuing you agree this app tracks your location only while walking.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ isUsername }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:64px 24px 32px">
+  <div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent);margin-bottom:8px">Step 1 of 2</div>
+  <h1 style="font-size:24px;margin:0 0 8px">Pick your callsign</h1>
+  <p style="margin:0 0 26px;font-size:14px;color:color-mix(in srgb, var(--color-text) 65%, transparent)">This is how rivals will see you on the map and leaderboard.</p>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px">
+    <image-slot id="profile-avatar" shape="circle" style="width:52px;height:52px;flex:none" placeholder="Photo"></image-slot>
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:600">{{ usernameOrPlaceholder }}</div>
+      <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Tap the swatch to change your territory color</div>
+    </div>
+    <button type="button" onClick="{{ cycleColor }}" style="width:28px;height:28px;border-radius:8px;flex:none;background:{{ assignedColorHex }};border:1.5px solid var(--color-neutral-700);cursor:pointer"></button>
+  </div>
+
+  <div class="field">
+    <label>Username</label>
+    <input class="input" value="{{ username }}" onChange="{{ setUsername }}" placeholder="e.g. northside_raider">
+  </div>
+
+  <div style="flex:1"></div>
+  <button type="button" class="btn btn-primary btn-block" onClick="{{ confirmUsername }}" style="height:50px">Continue</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRationale }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:70px 26px 32px;align-items:center;text-align:center">
+  <div style="width:76px;height:76px;border-radius:99px;background:var(--color-accent-800);border:1.5px solid var(--color-accent);display:flex;align-items:center;justify-content:center;margin-bottom:22px">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>
+  </div>
+  <h1 style="font-size:22px;margin:0 0 10px">TerraWars needs your location</h1>
+  <p style="margin:0 0 26px;font-size:14px;line-height:1.5;color:color-mix(in srgb, var(--color-text) 65%, transparent)">Precise location is used only while a walk is active, to draw your trail and detect closed loops.</p>
+
+  <div style="display:flex;flex-direction:column;gap:14px;width:100%;text-align:left;margin-bottom:auto">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><path d="M5 12l5 5 9-9"></path></svg>
+      <div style="font-size:13px;color:color-mix(in srgb, var(--color-text) 80%, transparent)">Tracked only during an active walk, never in the background</div>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:2px"><path d="M5 12l5 5 9-9"></path></svg>
+      <div style="font-size:13px;color:color-mix(in srgb, var(--color-text) 80%, transparent)">Your raw route is private — rivals only ever see your finished parcel</div>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-primary btn-block" onClick="{{ allowLocation }}" style="height:50px;margin-bottom:10px">Allow while using app</button>
+  <button type="button" class="btn btn-ghost" onClick="{{ allowLocation }}">Not now</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMain }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column">
+
+  <sc-if value="{{ isMapTab }}" hint-placeholder-val="{{ true }}">
+  <div style="position:relative;flex:1;overflow:hidden;background:radial-gradient(75% 50% at 28% 18%, #1d2036 0%, #0f1120 62%),#0c0d17">
+    <svg viewBox="0 0 402 700" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0">
+      <path d="M-20 470 C 90 430, 130 520, 240 500 S 380 430, 430 460 L 430 520 C 370 500, 300 570, 220 560 S 80 500, -20 530 Z" fill="rgba(84,116,168,.16)"></path>
+      <rect x="236" y="150" width="130" height="112" rx="10" fill="rgba(104,150,118,.13)"></rect>
+      <g stroke="rgba(233,233,237,.075)" stroke-width="11" stroke-linecap="square">
+        <path d="M64 -20 L64 720"></path><path d="M152 -20 L152 720"></path><path d="M244 -20 L244 720"></path><path d="M338 -20 L338 720"></path>
+        <path d="M-20 96 L430 96"></path><path d="M-20 268 L430 268"></path><path d="M-20 402 L430 402"></path><path d="M-20 596 L430 596"></path>
+      </g>
+      <path d="M-20 660 L430 180" stroke="rgba(233,233,237,.06)" stroke-width="14"></path>
+      <g stroke="rgba(233,233,237,.04)" stroke-width="4">
+        <path d="M108 -20 L108 720"></path><path d="M196 -20 L196 720"></path><path d="M292 -20 L292 720"></path>
+        <path d="M-20 176 L430 176"></path><path d="M-20 336 L430 336"></path><path d="M-20 500 L430 500"></path>
+      </g>
+    </svg>
+
+    <div style="position:absolute;inset:0">
+      <sc-for list="{{ parcels }}" as="p" hint-placeholder-count="6">
+        <div onClick="{{ p.open }}" style="position:absolute;top:{{ p.top }};left:{{ p.left }};width:{{ p.w }};height:{{ p.h }};clip-path:{{ p.clip }};background:{{ p.fill }};border:{{ p.border }};cursor:pointer"></div>
+      </sc-for>
+    </div>
+
+    <sc-for list="{{ rivalPings }}" as="ping" hint-placeholder-count="3">
+      <div style="position:absolute;top:{{ ping.top }};left:{{ ping.left }};width:10px;height:10px;border-radius:99px;background:{{ ping.color }};animation:tw-pulse 2.6s ease-in-out infinite;animation-delay:{{ ping.delay }}"></div>
+    </sc-for>
+
+    <div style="position:absolute;top:47%;left:50%;width:0;height:0">
+      <div style="position:absolute;left:-38px;top:-38px;width:76px;height:76px;border-radius:99px;background:color-mix(in srgb, var(--color-accent) 16%, transparent);animation:tw-pulse 3s ease-in-out infinite"></div>
+      <div style="position:absolute;left:-9px;top:-9px;width:18px;height:18px;border-radius:99px;background:var(--color-accent);border:3px solid var(--color-bg);box-shadow:var(--shadow-md)"></div>
+    </div>
+
+    <div style="position:absolute;top:52px;left:14px;right:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:9px;background:color-mix(in srgb, var(--color-surface) 90%, transparent);border:1px solid var(--color-neutral-800);border-radius:99px;padding:5px 14px 5px 5px;box-shadow:var(--shadow-sm)">
+          <image-slot id="profile-avatar" shape="circle" style="width:30px;height:30px;flex:none" placeholder=""></image-slot>
+          <div>
+            <div style="font-size:12.5px;font-weight:600;line-height:1.2">{{ usernameOrPlaceholder }}</div>
+            <div style="font-size:10.5px;color:var(--color-accent-300);line-height:1.2">{{ myAreaLabel }} held · #{{ myRank }}</div>
+          </div>
+        </div>
+        <div style="flex:1"></div>
+        <div style="display:flex;align-items:center;gap:6px;background:color-mix(in srgb, var(--color-surface) 90%, transparent);border:1px solid var(--color-neutral-800);border-radius:99px;padding:8px 12px;box-shadow:var(--shadow-sm)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 5 6 5 9a5 5 0 0 1-10 0c0-3 2-5 5-9Z"></path></svg>
+          <span style="font-size:12px;font-weight:600">{{ streakDays }}</span>
+        </div>
+      </div>
+
+      <div style="background:color-mix(in srgb, var(--color-surface) 90%, transparent);border:1px solid var(--color-neutral-800);border-radius:12px;padding:11px 13px;display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+          <div style="font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--color-accent-300)">Weekly contract</div>
+          <div style="font-size:11px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ challengeLabel }}</div>
+        </div>
+        <div style="height:5px;border-radius:99px;background:var(--color-neutral-800);overflow:hidden">
+          <div style="width:{{ challengePct }};height:100%;background:var(--color-accent);transition:width .3s"></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="position:absolute;right:14px;bottom:194px;display:flex;flex-direction:column;gap:10px;align-items:flex-end">
+      <div style="font-size:10.5px;padding:4px 9px;border-radius:99px;background:color-mix(in srgb, var(--color-surface) 90%, transparent);border:1px solid var(--color-neutral-800);color:color-mix(in srgb, var(--color-text) 65%, transparent)">{{ layersLabel }}</div>
+      <button type="button" onClick="{{ toggleShowOnlyMine }}" style="{{ layersBtnStyle }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5Z"></path><path d="M3 13l9 5 9-5"></path></svg>
+      </button>
+      <button type="button" style="{{ recenterBtnStyle }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path></svg>
+      </button>
+    </div>
+
+    <div style="position:absolute;left:14px;right:14px;bottom:14px;display:flex;flex-direction:column;gap:10px">
+      <div onClick="{{ nearbyTargetOpen }}" style="display:flex;align-items:center;gap:11px;background:color-mix(in srgb, var(--color-surface) 93%, transparent);border:1px solid var(--color-neutral-800);border-radius:14px;padding:11px 12px;box-shadow:var(--shadow-md);cursor:pointer">
+        <div style="width:38px;height:38px;border-radius:10px;flex:none;background:{{ nearbyTargetColor }};opacity:.85"></div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ nearbyTargetOwner }} is exposed</div>
+          <div style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ nearbyTargetArea }} · {{ nearbyTargetDistance }} from you</div>
+        </div>
+        <span class="tag tag-outline">Raid</span>
+      </div>
+
+      <div style="position:relative">
+        <div style="position:absolute;inset:0;border-radius:12px;background:color-mix(in srgb, var(--color-accent) 18%, transparent);animation:tw-pulse 2.8s ease-in-out infinite;pointer-events:none"></div>
+        <button type="button" class="btn btn-primary btn-block" onClick="{{ startWalk }}" style="height:56px;font-size:16px;letter-spacing:.02em;background:var(--color-bg);gap:9px;position:relative">
+          <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="7" rx="2.2" ry="3"></ellipse><ellipse cx="15" cy="15" rx="2.2" ry="3"></ellipse></svg>
+          Start Walk
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:7px">
+        <span style="width:7px;height:7px;border-radius:99px;background:var(--color-accent);animation:tw-pulse 1.8s ease-in-out infinite"></span>
+        <span style="font-size:11.5px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">{{ liveRivalsLabel }}</span>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isLeaderboardTab }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;display:flex;flex-direction:column;padding:60px 20px 0;overflow:hidden">
+    <h1 style="font-size:24px;margin:0 0 16px">Leaderboard</h1>
+    <div class="seg" style="margin-bottom:14px">
+      <label class="seg-opt" style="flex:1;justify-content:center"><input type="radio" name="lbscope" checked="{{ isGlobalScope }}" onChange="{{ setGlobalScope }}"><div class="dot" style="display:none"></div>Global</label>
+      <label class="seg-opt" style="flex:1;justify-content:center"><input type="radio" name="lbscope" checked="{{ isWeeklyScope }}" onChange="{{ setWeeklyScope }}"><div class="dot" style="display:none"></div>Weekly</label>
+    </div>
+    <div style="flex:1;overflow:auto;display:flex;flex-direction:column">
+      <sc-for list="{{ leaderboard }}" as="row" hint-placeholder-count="8">
+        <div onClick="{{ row.open }}" style="display:flex;align-items:center;gap:12px;height:52px;flex:none;border-bottom:1px solid var(--color-divider);cursor:pointer">
+          <div style="width:24px;font-size:13px;font-weight:600;color:color-mix(in srgb, var(--color-text) 55%, transparent)">{{ row.rank }}</div>
+          <div style="width:12px;height:12px;border-radius:99px;flex:none;background:{{ row.colorHex }}"></div>
+          <div style="flex:1;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.username }}</div>
+          <div style="font-size:13.5px;font-weight:600;color:color-mix(in srgb, var(--color-text) 78%, transparent)">{{ row.areaLabel }}</div>
+          <svg width="8" height="14" viewBox="0 0 8 14" style="flex:none"><path d="M1 1l6 6-6 6" stroke="color-mix(in srgb, var(--color-text) 35%, transparent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+        </div>
+      </sc-for>
+    </div>
+    <div style="background:var(--color-accent);color:var(--color-bg);border-radius:10px;padding:0 16px;min-height:48px;display:flex;align-items:center;justify-content:space-between;margin:12px 0">
+      <div style="font-size:13.5px;font-weight:700">Your rank #{{ myRank }}</div>
+      <div style="font-size:13.5px;font-weight:700">{{ myAreaLabel }}</div>
+    </div>
+  </div>
+  </sc-if>
+
+  <sc-if value="{{ isProfileTab }}" hint-placeholder-val="{{ false }}">
+  <div style="flex:1;overflow:auto;padding:60px 20px 24px">
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:26px">
+      <image-slot id="profile-avatar" shape="circle" style="width:56px;height:56px;flex:none" placeholder="Photo"></image-slot>
+      <div>
+        <div style="font-size:19px;font-family:var(--font-heading)">{{ usernameOrPlaceholder }}</div>
+        <div style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">@{{ usernameHandle }}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:26px">
+      <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Total area</div>
+      <div style="font-size:36px;font-family:var(--font-heading);color:var(--color-accent)">18,940 m²</div>
+      <div style="font-size:12.5px;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-top:4px">Ranked #{{ myRank }} globally</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px">
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Parcels</div><div style="font-size:19px;font-weight:600">14</div></div>
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Walks</div><div style="font-size:19px;font-weight:600">37</div></div>
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Distance</div><div style="font-size:19px;font-weight:600">96.4 km</div></div>
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Best claim</div><div style="font-size:19px;font-weight:600">3,210 m²</div></div>
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Stolen</div><div style="font-size:19px;font-weight:600">5,880 m²</div></div>
+      <div><div style="font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Lost</div><div style="font-size:19px;font-weight:600">1,240 m²</div></div>
+    </div>
+
+    <button type="button" class="btn btn-secondary btn-block" onClick="{{ openSettings }}" style="height:46px">Settings</button>
+  </div>
+  </sc-if>
+
+  <div style="flex:none;display:flex;align-items:stretch;background:var(--color-surface);border-top:1px solid var(--color-divider);padding-bottom:22px">
+    <button type="button" onClick="{{ setTabMap }}" style="{{ tabMapStyle }}">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6-5.686-6-10a6 6 0 1 1 12 0c0 4.314-6 10-6 10Z"></path><circle cx="12" cy="11" r="2"></circle></svg>
+      <span style="font-size:10.5px">Map</span>
+    </button>
+    <button type="button" onClick="{{ setTabLeaderboard }}" style="{{ tabLeaderboardStyle }}">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"></circle><path d="M9 13.5 7 21l5-3 5 3-2-7.5"></path></svg>
+      <span style="font-size:10.5px">Ranks</span>
+    </button>
+    <button type="button" onClick="{{ setTabProfile }}" style="{{ tabProfileStyle }}">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"></circle><path d="M4 20c1.5-4 5-6 8-6s6.5 2 8 6"></path></svg>
+      <span style="font-size:10.5px">Profile</span>
+    </button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isActiveWalk }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;background:radial-gradient(90% 60% at 70% 10%, #1b1e30 0%, #101220 60%),#0e0f19">
+  <div style="position:absolute;inset:0;opacity:.5;background-image:repeating-linear-gradient(0deg, transparent 0 38px, rgba(255,255,255,.04) 38px 39px),repeating-linear-gradient(90deg, transparent 0 38px, rgba(255,255,255,.04) 38px 39px)"></div>
+
+  <svg style="position: absolute; inset: 0; left: -7px; top: -296px" width="100%" height="100%" viewBox="0 0 402 560" preserveAspectRatio="none">
+    <polyline points="{{ trailPoints }}" fill="none" stroke="var(--color-accent)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+    <sc-if value="{{ walkCanClaim }}" hint-placeholder-val="{{ false }}">
+      <polygon points="{{ previewRing }}" fill="var(--color-accent-800)" fill-opacity="0.4" stroke="var(--color-accent)" stroke-width="2"></polygon>
+    </sc-if>
+  </svg>
+
+  <div style="flex:1"></div>
+  <div style="background:var(--color-surface);border-top-left-radius:22px;border-top-right-radius:22px;padding:20px 20px 30px;display:flex;flex-direction:column;gap:14px;box-shadow:var(--shadow-lg)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;row-gap:16px">
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:3px">Distance</div><div style="font-size:24px;font-weight:700">{{ walkDistanceLabel }}</div></div>
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:3px">Duration</div><div style="font-size:24px;font-weight:700">{{ walkDurationLabel }}</div></div>
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:3px">Pace</div><div style="font-size:24px;font-weight:700">{{ walkPaceLabel }}</div></div>
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:3px">Enclosed</div><div style="font-size:24px;font-weight:700;color:{{ walkAreaColor }}">{{ walkAreaLabel }}</div></div>
+    </div>
+
+    <div style="text-align:center;font-size:12.5px;color:{{ walkStatusColor }}">{{ walkStatusText }}</div>
+
+    <div style="display:flex;gap:12px">
+      <button type="button" class="btn btn-secondary" style="flex:1;height:48px;gap:8px" onClick="{{ togglePause }}">
+        <sc-if value="{{ isPaused }}" hint-placeholder-val="{{ false }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5v14l11-7-11-7Z"></path></svg>Resume
+        </sc-if>
+        <sc-if value="{{ isRecording }}" hint-placeholder-val="{{ true }}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>Pause
+        </sc-if>
+      </button>
+      <button type="button" class="btn btn-primary" style="flex:1;height:48px;gap:8px" onClick="{{ finishWalk }}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v18"></path><path d="M6 4h11l-2.5 4L17 12H6"></path></svg>
+        {{ finishLabel }}
+      </button>
+    </div>
+    <button type="button" class="btn btn-ghost" onClick="{{ discardWalk }}" style="justify-content:center;gap:6px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"></path><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path><path d="M9 7V4h6v3"></path></svg>
+      Discard walk
+    </button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isClaimResult }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:70px 26px 32px;align-items:center;text-align:center">
+  <sc-for list="{{ confetti }}" as="c" hint-placeholder-count="0">
+    <div style="position:absolute;top:{{ c.top }};left:{{ c.left }};width:6px;height:6px;border-radius:2px;background:{{ c.color }};animation:tw-rise 2.4s ease-out infinite;animation-delay:{{ c.delay }}"></div>
+  </sc-for>
+
+  <h1 style="font-size:24px;margin:70px 0 0">{{ claimTitle }}</h1>
+
+  <sc-if value="{{ claimAccepted }}" hint-placeholder-val="{{ true }}">
+  <div style="margin:24px 0 10px">
+    <div style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 55%, transparent);margin-bottom:6px">Area gained</div>
+    <div style="font-size:40px;font-family:var(--font-heading);color:var(--color-accent)">{{ claimGainedLabel }}</div>
+  </div>
+  <sc-if value="{{ claimHasStolen }}" hint-placeholder-val="{{ false }}">
+    <div style="font-size:13.5px;color:color-mix(in srgb, var(--color-text) 65%, transparent)">Includes {{ claimStolenLabel }} raided from rivals</div>
+  </sc-if>
+  </sc-if>
+
+  <sc-if value="{{ claimRejected }}" hint-placeholder-val="{{ false }}">
+  <p style="margin:20px 0;font-size:14px;color:color-mix(in srgb, var(--color-text) 70%, transparent);max-width:280px">{{ claimRejectReason }}</p>
+  </sc-if>
+
+  <div style="flex:1"></div>
+  <p style="font-size:12px;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:22px">Walk saved — {{ walkDistanceLabel }} in {{ walkDurationLabel }}</p>
+  <button type="button" class="btn btn-primary btn-block" onClick="{{ backToMap }}" style="height:50px">Back to map</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isParcelDetail }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(10,11,18,.6)">
+  <div style="background:var(--color-surface);border-top-left-radius:22px;border-top-right-radius:22px;padding:22px 22px 34px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:34px;height:34px;border-radius:9px;background:{{ selParcelColor }}"></div>
+        <div>
+          <div style="font-size:16px;font-weight:600">{{ selParcelOwner }}</div>
+          <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Claimed {{ selParcelDate }}</div>
+        </div>
+      </div>
+      <button type="button" onClick="{{ closeParcel }}" style="width:32px;height:32px;border-radius:99px;background:color-mix(in srgb, var(--color-text) 10%, transparent);border:none;color:var(--color-text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+    </div>
+
+    <div class="card" style="background:color-mix(in srgb, var(--color-text) 5%, transparent);flex-direction:row;justify-content:space-between;align-items:center">
+      <div>
+        <div class="card-kicker">Area</div>
+        <div class="card-title">{{ selParcelArea }}</div>
+      </div>
+      <sc-if value="{{ selParcelProtected }}" hint-placeholder-val="{{ false }}">
+        <span class="tag tag-outline" style="display:flex;align-items:center;gap:5px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-3Z"></path></svg>
+          Protected
+        </span>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ selParcelMine }}" hint-placeholder-val="{{ false }}">
+      <p style="margin:0;font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">This is your territory. Keep walking to grow it — an unprotected edge is an invitation.</p>
+    </sc-if>
+    <sc-if value="{{ selParcelRival }}" hint-placeholder-val="{{ true }}">
+      <p style="margin:0;font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Walk a loop that crosses this land to cut away the overlap and claim it.</p>
+      <button type="button" class="btn btn-primary btn-block" onClick="{{ raidParcel }}" style="height:48px;gap:8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>
+        Raid this territory
+      </button>
+    </sc-if>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isPublicProfile }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(10,11,18,.6)">
+  <div style="background:var(--color-surface);border-top-left-radius:22px;border-top-right-radius:22px;padding:22px 22px 34px;display:flex;flex-direction:column;gap:16px;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div style="display:flex;align-items:center;gap:12px">
+        <image-slot id="rival-avatar-{{ selRivalUsername }}" shape="circle" style="width:52px;height:52px;flex:none" placeholder="Photo"></image-slot>
+        <div>
+          <div style="font-size:17px;font-weight:600">{{ selRivalUsername }}</div>
+          <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Rank #{{ selRivalRank }} · {{ selRivalAreaLabel }}</div>
+        </div>
+      </div>
+      <button type="button" onClick="{{ closePublicProfile }}" style="width:32px;height:32px;border-radius:99px;background:color-mix(in srgb, var(--color-text) 10%, transparent);border:none;color:var(--color-text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Territory</div><div style="width:16px;height:16px;border-radius:5px;background:{{ selRivalColor }}"></div></div>
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Area</div><div style="font-size:16px;font-weight:600">{{ selRivalAreaLabel }}</div></div>
+      <div><div style="font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:color-mix(in srgb, var(--color-text) 50%, transparent);margin-bottom:4px">Rank</div><div style="font-size:16px;font-weight:600">#{{ selRivalRank }}</div></div>
+    </div>
+
+    <p style="margin:0;font-size:13px;color:color-mix(in srgb, var(--color-text) 60%, transparent)">Their nearest parcel to you is open to raid — walk a loop that crosses it to cut away territory.</p>
+    <button type="button" class="btn btn-primary btn-block" onClick="{{ raidFromProfile }}" style="height:48px;gap:8px">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"></path></svg>
+      Raid their territory
+    </button>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;padding:56px 0 24px">
+  <div style="display:flex;align-items:center;gap:10px;padding:0 20px;margin-bottom:20px">
+    <button type="button" onClick="{{ backToProfile }}" style="width:34px;height:34px;border-radius:99px;background:color-mix(in srgb, var(--color-text) 8%, transparent);border:none;color:var(--color-text);display:flex;align-items:center;justify-content:center;cursor:pointer">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"></path></svg>
+    </button>
+    <h1 style="font-size:20px;margin:0">Settings</h1>
+  </div>
+
+  <div style="padding:0 20px;display:flex;flex-direction:column;gap:18px;overflow:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;min-height:44px">
+      <div>
+        <div style="font-size:14.5px">Units</div>
+        <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Distance and area display</div>
+      </div>
+      <div class="seg">
+        <label class="seg-opt"><input type="radio" name="units" checked="{{ isMetric }}" onChange="{{ setMetric }}"><div class="dot" style="display:none"></div>Metric</label>
+        <label class="seg-opt"><input type="radio" name="units" checked="{{ isImperial }}" onChange="{{ setImperial }}"><div class="dot" style="display:none"></div>Imperial</label>
+      </div>
+    </div>
+
+    <div class="hr" style="margin:0"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;min-height:44px">
+      <div>
+        <div style="font-size:14.5px">Raid notifications</div>
+        <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">Alert when your land is taken</div>
+      </div>
+      <button type="button" onClick="{{ toggleNotifications }}" style="{{ notifToggleTrack }}">
+        <div style="{{ notifToggleKnob }}"></div>
+      </button>
+    </div>
+
+    <div class="hr" style="margin:0"></div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;min-height:44px">
+      <div>
+        <div style="font-size:14.5px">Dark surface</div>
+        <div style="font-size:12px;color:color-mix(in srgb, var(--color-text) 55%, transparent)">TerraWars is built dark-first</div>
+      </div>
+      <button type="button" disabled="" style="{{ notifToggleTrackOnDisabled }}">
+        <div style="{{ notifToggleKnobOn }}"></div>
+      </button>
+    </div>
+
+    <div class="hr" style="margin:0"></div>
+
+    <div style="display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+      <div style="font-size:14.5px;flex:1">Privacy &amp; location</div>
+      <svg width="8" height="14" viewBox="0 0 8 14"><path d="M1 1l6 6-6 6" stroke="color-mix(in srgb, var(--color-text) 40%, transparent)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+    </div>
+  </div>
+
+  <div style="padding:20px 20px 0">
+    <button type="button" class="btn btn-secondary btn-block" onClick="{{ signOut }}" style="height:46px">Sign out</button>
+  </div>
+</div>
+</sc-if>
+
+</div>
+</x-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const TERRITORY_COLORS = ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#14B8A6','#F97316','#6366F1','#84CC16'];
+
+const PARCEL_DATA = [
+  {id:'p1', top:'8%',  left:'6%',  w:'34%', h:'22%', clip:'polygon(10% 0%,100% 15%,85% 100%,0% 80%)', colorIdx:1, mine:false, owner:'ridge_walker', area:1840, protected:false, date:'2 days ago'},
+  {id:'p2', top:'14%', left:'52%', w:'30%', h:'20%', clip:'polygon(0% 20%,80% 0%,100% 70%,20% 100%)', colorIdx:3, mine:false, owner:'foxglove', area:960, protected:true, date:'6 hours ago'},
+  {id:'p3', top:'40%', left:'12%', w:'28%', h:'24%', clip:'polygon(15% 0%,100% 10%,90% 100%,0% 90%)', colorIdx:6, mine:false, owner:'nightjar', area:2210, protected:false, date:'yesterday'},
+  {id:'p4', top:'38%', left:'48%', w:'36%', h:'26%', clip:'polygon(0% 10%,70% 0%,100% 60%,60% 100%,0% 85%)', colorIdx:0, mine:true, owner:'you', area:2340, protected:false, date:'today'},
+  {id:'p5', top:'66%', left:'8%',  w:'26%', h:'18%', clip:'polygon(0% 0%,100% 15%,85% 100%,10% 90%)', colorIdx:8, mine:false, owner:'east_line', area:640, protected:false, date:'3 days ago'},
+  {id:'p6', top:'62%', left:'58%', w:'30%', h:'22%', clip:'polygon(10% 0%,100% 5%,90% 100%,0% 95%)', colorIdx:4, mine:false, owner:'switchback', area:1420, protected:false, date:'5 days ago'},
+];
+
+const LEADERBOARD_DATA = [
+  {rank:1, username:'switchback', colorIdx:4, area:41200},
+  {rank:2, username:'nightjar', colorIdx:6, area:38650},
+  {rank:3, username:'foxglove', colorIdx:3, area:33020},
+  {rank:4, username:'ridge_walker', colorIdx:1, area:27410},
+  {rank:5, username:'east_line', colorIdx:8, area:24980},
+  {rank:6, username:'you', colorIdx:0, area:18940, me:true},
+  {rank:7, username:'lowtide', colorIdx:5, area:15200},
+  {rank:8, username:'mkwalker', colorIdx:9, area:11040},
+];
+
+const ONBOARD_SLIDES = [
+  {title:'Claim real ground', body:'Walk a loop outside and it becomes your territory on the map.'},
+  {title:'Defend it or lose it', body:'Rivals can walk into your land and cut away the part they cross.'},
+  {title:'Climb the leaderboard', body:'Score by total area owned — global, weekly, and by city.'},
+];
+
+function fmtArea(m2) {
+  if (m2 >= 10000) return (m2 / 10000).toFixed(2) + ' ha';
+  return Math.round(m2).toLocaleString() + ' m²';
+}
+function fmtDist(m) {
+  if (m >= 1000) return (m / 1000).toFixed(2) + ' km';
+  return Math.round(m) + ' m';
+}
+function fmtDur(s) {
+  const mm = Math.floor(s / 60);
+  const ss = Math.floor(s % 60);
+  return mm + ':' + String(ss).padStart(2, '0');
+}
+function toggleTrackStyle(on) {
+  return 'width:46px;height:27px;border-radius:99px;border:none;cursor:pointer;position:relative;padding:0;background:' + (on ? 'var(--color-accent)' : 'var(--color-neutral-700)') + ';transition:background .15s';
+}
+function toggleKnobStyle(on) {
+  return 'position:absolute;top:2.5px;left:' + (on ? '22px' : '3px') + ';width:22px;height:22px;border-radius:99px;background:#fff;transition:left .15s';
+}
+
+class Component extends DCLogic {
+  state = {
+    screen: 'onboarding',
+    onboardingStep: 0,
+    authMode: 'signup',
+    username: '',
+    tab: 'map',
+    showOnlyMine: false,
+    selectedParcelId: null,
+    leaderboardScope: 'global',
+    selectedRivalUsername: null,
+    myColorIdx: 0,
+    units: 'metric',
+    notifications: true,
+    walk: {elapsedS: 0, distanceM: 0, areaM2: 0, canClaim: false, phase: 'recording'},
+    claim: null,
+  };
+
+  componentWillUnmount() {
+    if (this._timer) clearInterval(this._timer);
+  }
+
+  goto = (screen) => this.setState({screen});
+
+  skipOnboarding = () => this.setState({screen: 'auth'});
+  nextOnboarding = () => {
+    if (this.state.onboardingStep >= 2) {
+      this.setState({screen: 'auth'});
+    } else {
+      this.setState(s => ({onboardingStep: s.onboardingStep + 1}));
+    }
+  };
+
+  setSignup = () => this.setState({authMode: 'signup'});
+  setSignin = () => this.setState({authMode: 'signin'});
+  submitAuth = () => this.setState({screen: this.state.authMode === 'signup' ? 'username' : 'main'});
+
+  setUsername = (e) => this.setState({username: e.target.value});
+  confirmUsername = () => this.setState({screen: 'locationRationale'});
+  allowLocation = () => this.setState({screen: 'main'});
+
+  setTabMap = () => this.setState({tab: 'map', screen: 'main'});
+  setTabLeaderboard = () => this.setState({tab: 'leaderboard', screen: 'main'});
+  setTabProfile = () => this.setState({tab: 'profile', screen: 'main'});
+  toggleShowOnlyMine = () => this.setState(s => ({showOnlyMine: !s.showOnlyMine}));
+
+  setGlobalScope = () => this.setState({leaderboardScope: 'global'});
+  setWeeklyScope = () => this.setState({leaderboardScope: 'weekly'});
+
+  cycleColor = () => this.setState(s => ({myColorIdx: (s.myColorIdx + 1) % TERRITORY_COLORS.length}));
+  goToOnboardStep = (i) => this.setState({onboardingStep: i});
+
+  openPublicProfile = (username) => this.setState({selectedRivalUsername: username, screen: 'publicProfile'});
+  closePublicProfile = () => this.setState({screen: 'main', tab: 'leaderboard', selectedRivalUsername: null});
+  raidFromProfile = () => this.startWalk();
+
+  openParcel = (id) => this.setState({selectedParcelId: id, screen: 'parcelDetail'});
+  closeParcel = () => this.setState({screen: 'main', selectedParcelId: null});
+  raidParcel = () => this.startWalk();
+
+  openSettings = () => this.setState({screen: 'settings'});
+  backToProfile = () => this.setState({screen: 'main', tab: 'profile'});
+  setMetric = () => this.setState({units: 'metric'});
+  setImperial = () => this.setState({units: 'imperial'});
+  toggleNotifications = () => this.setState(s => ({notifications: !s.notifications}));
+  signOut = () => {
+    if (this._timer) clearInterval(this._timer);
+    this.setState({
+      screen: 'onboarding', onboardingStep: 0, tab: 'map', username: '',
+      walk: {elapsedS: 0, distanceM: 0, areaM2: 0, canClaim: false, phase: 'recording'}, claim: null,
+    });
+  };
+
+  startWalk = () => {
+    if (this._timer) clearInterval(this._timer);
+    this.setState({screen: 'activeWalk', walk: {elapsedS: 0, distanceM: 0, areaM2: 0, canClaim: false, phase: 'recording'}});
+    this._timer = setInterval(() => {
+      this.setState(s => {
+        if (s.walk.phase === 'paused') return null;
+        const elapsedS = s.walk.elapsedS + 1;
+        const distanceM = s.walk.distanceM + 1.35;
+        const canClaim = elapsedS >= 8 ? true : s.walk.canClaim;
+        const areaM2 = canClaim ? 2340 : 0;
+        return {walk: {...s.walk, elapsedS, distanceM, canClaim, areaM2}};
+      });
+    }, 1000);
+  };
+
+  togglePause = () => this.setState(s => ({walk: {...s.walk, phase: s.walk.phase === 'paused' ? 'recording' : 'paused'}}));
+
+  finishWalk = () => {
+    if (this._timer) clearInterval(this._timer);
+    const w = this.state.walk;
+    const accepted = w.canClaim;
+    this.setState({
+      screen: 'claimResult',
+      claim: accepted
+        ? {accepted: true, gained: w.areaM2, stolen: 480}
+        : {accepted: false, reason: 'Your loop hadn\u2019t closed yet, so no territory changed hands. The walk is still saved.'},
+    });
+  };
+
+  discardWalk = () => {
+    if (this._timer) clearInterval(this._timer);
+    this.setState({screen: 'main', tab: 'map'});
+  };
+
+  backToMap = () => this.setState({screen: 'main', tab: 'map', claim: null});
+
+  renderVals() {
+    const s = this.state;
+    const assignedColorHex = TERRITORY_COLORS[s.myColorIdx];
+    const slide = ONBOARD_SLIDES[s.onboardingStep];
+
+    const parcels = PARCEL_DATA.map(p => ({
+      ...p,
+      fill: p.mine
+        ? 'color-mix(in srgb, ' + TERRITORY_COLORS[p.colorIdx] + ' 45%, transparent)'
+        : 'color-mix(in srgb, ' + TERRITORY_COLORS[p.colorIdx] + ' 28%, transparent)',
+      border: (p.protected ? '2.5px solid var(--color-accent-2)' : '1.5px solid ' + TERRITORY_COLORS[p.colorIdx]),
+      open: () => this.openParcel(p.id),
+    })).filter(p => !s.showOnlyMine || p.mine);
+
+    const selParcel = PARCEL_DATA.find(p => p.id === s.selectedParcelId) || PARCEL_DATA[3];
+
+    const leaderboard = LEADERBOARD_DATA.map(r => ({
+      ...r,
+      colorHex: TERRITORY_COLORS[r.colorIdx],
+      areaLabel: fmtArea(r.area),
+      open: () => this.openPublicProfile(r.username),
+    }));
+    const me = LEADERBOARD_DATA.find(r => r.me);
+    const selRival = LEADERBOARD_DATA.find(r => r.username === s.selectedRivalUsername) || LEADERBOARD_DATA[0];
+
+    const tabBtn = (active) => 'flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding-top:10px;background:none;border:none;cursor:pointer;color:' + (active ? 'var(--color-accent)' : 'var(--color-neutral-500)');
+
+    const w = s.walk;
+    const trailPointsList = [[40,480],[70,400],[110,340],[160,300],[210,290],[250,320],[270,380],[250,440],[200,470],[150,480],[100,470],[60,460]];
+    const trailPoints = trailPointsList.slice(0, Math.min(trailPointsList.length, 2 + Math.floor(w.elapsedS / 1.2))).map(pt => pt[0] + ',' + pt[1]).join(' ');
+    const previewRing = trailPointsList.map(pt => pt[0] + ',' + pt[1]).join(' ');
+
+    const confetti = w.canClaim ? Array.from({length: 14}).map((_, i) => ({
+      top: (30 + (i * 5) % 40) + '%', left: (5 + i * 7) % 95 + '%',
+      color: TERRITORY_COLORS[i % TERRITORY_COLORS.length], delay: (i * 0.15) + 's',
+    })) : [];
+
+    const claim = s.claim || {accepted: false, gained: 0, stolen: 0, reason: ''};
+
+    return {
+      appBg: 'var(--color-bg)',
+      isOnboarding: s.screen === 'onboarding',
+      isAuth: s.screen === 'auth',
+      isUsername: s.screen === 'username',
+      isRationale: s.screen === 'locationRationale',
+      isMain: s.screen === 'main',
+      isActiveWalk: s.screen === 'activeWalk',
+      isClaimResult: s.screen === 'claimResult',
+      isParcelDetail: s.screen === 'parcelDetail',
+      isPublicProfile: s.screen === 'publicProfile',
+      isSettings: s.screen === 'settings',
+
+      onboardTitle: slide.title,
+      onboardBody: slide.body,
+      isOnboard1: s.onboardingStep === 0,
+      isOnboard2: s.onboardingStep === 1,
+      isOnboard3: s.onboardingStep === 2,
+      onboardPreviewRows: LEADERBOARD_DATA.slice(3, 7).map(r => ({
+        rank: r.rank,
+        username: r.me ? 'you' : r.username,
+        colorHex: r.me ? TERRITORY_COLORS[s.myColorIdx] : TERRITORY_COLORS[r.colorIdx],
+        areaLabel: fmtArea(r.area),
+        bg: r.me ? 'var(--color-accent-900)' : 'transparent',
+        border: r.me ? '1px solid var(--color-accent)' : '1px solid transparent',
+      })),
+      onboardCta: s.onboardingStep >= 2 ? 'Get started' : 'Next',
+      onboardDots: ONBOARD_SLIDES.map((_, i) => ({size: i === s.onboardingStep ? '20px' : '6px', color: i === s.onboardingStep ? 'var(--color-accent)' : 'var(--color-neutral-700)', go: () => this.goToOnboardStep(i)})),
+      onboardShapeA: '30,120 120,20 130,90 60,140',
+      onboardShapeB: '90,40 145,70 110,130 55,100',
+      skipOnboarding: this.skipOnboarding,
+      nextOnboarding: this.nextOnboarding,
+
+      isSignup: s.authMode === 'signup',
+      isSignin: s.authMode === 'signin',
+      setSignup: this.setSignup,
+      setSignin: this.setSignin,
+      authCta: s.authMode === 'signup' ? 'Create account' : 'Sign in',
+      submitAuth: this.submitAuth,
+
+      username: s.username,
+      setUsername: this.setUsername,
+      usernameOrPlaceholder: s.username || 'you',
+      usernameHandle: s.username || 'you',
+      assignedColorHex,
+      confirmUsername: this.confirmUsername,
+      allowLocation: this.allowLocation,
+
+      tab: s.tab,
+      isMapTab: s.tab === 'map',
+      isLeaderboardTab: s.tab === 'leaderboard',
+      isProfileTab: s.tab === 'profile',
+      setTabMap: this.setTabMap,
+      setTabLeaderboard: this.setTabLeaderboard,
+      setTabProfile: this.setTabProfile,
+      tabMapStyle: tabBtn(s.tab === 'map'),
+      tabLeaderboardStyle: tabBtn(s.tab === 'leaderboard'),
+      tabProfileStyle: tabBtn(s.tab === 'profile'),
+
+      streakDays: '6 days',
+      challengeLabel: '3,120 / 5,000 m²',
+      challengePct: '62%',
+      layersLabel: s.showOnlyMine ? 'Only my land' : 'All territory',
+      rivalPings: [
+        {top: '22%', left: '68%', color: '#F59E0B', delay: '0s'},
+        {top: '58%', left: '22%', color: '#14B8A6', delay: '.9s'},
+        {top: '74%', left: '72%', color: '#8B5CF6', delay: '1.7s'},
+      ],
+      nearbyTargetOwner: 'nightjar',
+      nearbyTargetColor: TERRITORY_COLORS[6],
+      nearbyTargetArea: fmtArea(2210),
+      nearbyTargetDistance: '240 m',
+      nearbyTargetOpen: () => this.openParcel('p3'),
+      liveRivalsLabel: '3 rivals walking nearby',
+      locationBannerVisible: false,
+      layersBtnStyle: 'width:44px;height:44px;border-radius:12px;border:none;cursor:pointer;background:var(--color-surface);color:' + (s.showOnlyMine ? 'var(--color-accent)' : 'var(--color-neutral-400)') + ';display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)',
+      recenterBtnStyle: 'width:44px;height:44px;border-radius:12px;border:none;cursor:pointer;background:var(--color-surface);color:var(--color-neutral-400);display:flex;align-items:center;justify-content:center;box-shadow:var(--shadow-sm)',
+      toggleShowOnlyMine: this.toggleShowOnlyMine,
+      startWalk: this.startWalk,
+      parcels,
+
+      isGlobalScope: s.leaderboardScope === 'global',
+      isWeeklyScope: s.leaderboardScope === 'weekly',
+      setGlobalScope: this.setGlobalScope,
+      setWeeklyScope: this.setWeeklyScope,
+      leaderboard,
+      myRank: me ? me.rank : 6,
+      myAreaLabel: me ? fmtArea(me.area) : '18,940 m²',
+
+      openSettings: this.openSettings,
+
+      selRivalUsername: selRival.username,
+      selRivalRank: selRival.rank,
+      selRivalColor: TERRITORY_COLORS[selRival.colorIdx],
+      selRivalAreaLabel: fmtArea(selRival.area),
+      closePublicProfile: this.closePublicProfile,
+      raidFromProfile: this.raidFromProfile,
+      cycleColor: this.cycleColor,
+
+      isRecording: w.phase === 'recording',
+      isPaused: w.phase === 'paused',
+      walkCanClaim: w.canClaim,
+      walkDistanceLabel: fmtDist(w.distanceM),
+      walkDurationLabel: fmtDur(w.elapsedS),
+      walkPaceLabel: w.distanceM > 20 ? (w.elapsedS / 60 / (w.distanceM / 1000)).toFixed(1) + ' /km' : '—',
+      walkAreaLabel: w.canClaim ? fmtArea(w.areaM2) : '—',
+      walkAreaColor: w.canClaim ? 'var(--color-accent)' : 'var(--color-text)',
+      walkStatusText: w.distanceM < 5 ? 'Waiting for GPS…' : (w.canClaim ? 'Loop closed — finish to claim ' + fmtArea(w.areaM2) : 'Keep walking to close the loop'),
+      walkStatusColor: w.canClaim ? 'var(--color-accent)' : 'color-mix(in srgb, var(--color-text) 60%, transparent)',
+      finishLabel: w.canClaim ? 'Claim' : 'Finish',
+      trailPoints,
+      previewRing,
+      togglePause: this.togglePause,
+      finishWalk: this.finishWalk,
+      discardWalk: this.discardWalk,
+
+      claimAccepted: claim.accepted,
+      claimRejected: !claim.accepted,
+      claimTitle: claim.accepted ? 'Territory claimed' : 'No territory claimed',
+      claimGainedLabel: fmtArea(claim.gained || 0),
+      claimHasStolen: !!claim.stolen,
+      claimStolenLabel: fmtArea(claim.stolen || 0),
+      claimRejectReason: claim.reason,
+      confetti,
+      backToMap: this.backToMap,
+
+      selParcelColor: TERRITORY_COLORS[selParcel.colorIdx],
+      selParcelOwner: selParcel.mine ? 'You' : selParcel.owner,
+      selParcelDate: selParcel.date,
+      selParcelArea: fmtArea(selParcel.area),
+      selParcelProtected: selParcel.protected,
+      selParcelMine: selParcel.mine,
+      selParcelRival: !selParcel.mine,
+      closeParcel: this.closeParcel,
+      raidParcel: this.raidParcel,
+
+      isMetric: s.units === 'metric',
+      isImperial: s.units === 'imperial',
+      setMetric: this.setMetric,
+      setImperial: this.setImperial,
+      notifToggleTrack: toggleTrackStyle(s.notifications),
+      notifToggleKnob: toggleKnobStyle(s.notifications),
+      notifToggleTrackOnDisabled: toggleTrackStyle(true) + ';opacity:.6;cursor:not-allowed',
+      notifToggleKnobOn: toggleKnobStyle(true),
+      toggleNotifications: this.toggleNotifications,
+      backToProfile: this.backToProfile,
+      signOut: this.signOut,
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -26,7 +26,8 @@ insert into public.game_config (key, value, description) values
   ('PROTECTION_HOURS',        '6',       'GR-23: how long a fresh parcel cannot be stolen'),
   ('MIN_PARCEL_AREA_M2',      '100',     'GR-20: remainders smaller than this are discarded as slivers'),
   ('MERGE_GAP_M',             '2',       'GR-21: own parcels closer than this are merged'),
-  ('MAX_CLAIMS_PER_DAY',      '10',      'GR-24: max accepted claims per user per rolling 24 h')
+  ('MAX_CLAIMS_PER_DAY',      '10',      'GR-24: max accepted claims per user per rolling 24 h'),
+  ('WEEKLY_CONTRACT_TARGET_M2','5000',   'FR-61: weekly area-gained goal shown on the map HUD. Display only')
 on conflict (key) do update
   set value       = excluded.value,
       description = excluded.description,

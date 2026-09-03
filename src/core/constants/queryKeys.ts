@@ -41,6 +41,15 @@ export const queryKeys = {
     all: ['leaderboards'] as const,
     global: () => [...queryKeys.leaderboards.all, 'global'] as const,
     weekly: () => [...queryKeys.leaderboards.all, 'weekly'] as const,
+    /**
+     * Your own weekly line, for the map's contract card.
+     *
+     * A separate key from `weekly()` on purpose: that one caches a 50-row page
+     * and this one asks for a single row, so sharing a key would leave the
+     * leaderboard screen rendering whichever of the two fetched last. It still
+     * sits under the `weekly` prefix, so one invalidation clears both.
+     */
+    weeklyMe: () => [...queryKeys.leaderboards.all, 'weekly', 'me'] as const,
     local: (city: string) => [...queryKeys.leaderboards.all, 'local', city] as const,
   },
 

@@ -1,19 +1,13 @@
-import React, {createContext, useContext, useMemo, type PropsWithChildren} from 'react';
+import React, {createContext, useContext, type PropsWithChildren} from 'react';
+
+import {StyleSheet, type ImageStyle, type TextStyle, type ViewStyle} from 'react-native';
 
 import {
-  StyleSheet,
-  useColorScheme,
-  type ImageStyle,
-  type TextStyle,
-  type ViewStyle,
-} from 'react-native';
-
-import {
-  darkColors,
   durations,
   layout,
-  lightColors,
+  nocturneColors,
   radius,
+  shadows,
   spacing,
   typography,
   type ThemeColors,
@@ -26,38 +20,37 @@ export interface Theme {
   typography: typeof typography;
   layout: typeof layout;
   durations: typeof durations;
+  shadows: typeof shadows;
   isDark: boolean;
 }
 
+/**
+ * The one theme.
+ *
+ * Nocturne is a dark-only system and the app is drawn in it: the settings
+ * screen shows "Dark surface" as a switch that is on and disabled, which is the
+ * design stating the same thing. Following `useColorScheme()` here would give a
+ * user in light mode the chrome of one design and the map tiles of another.
+ *
+ * Built once at module scope rather than in a `useMemo`, because there is
+ * nothing left for it to depend on. When a light variant is actually designed,
+ * this is the one place a resolver and a stored preference plug back in.
+ */
+const nocturne: Theme = {
+  colors: nocturneColors,
+  spacing,
+  radius,
+  typography,
+  layout,
+  durations,
+  shadows,
+  isDark: true,
+};
+
 const ThemeContext = createContext<Theme | null>(null);
 
-/**
- * Provides the resolved theme.
- *
- * Follows the system colour scheme with no in-app override in v1. That is a
- * deliberate scope call rather than an omission: an app whose main surface is a
- * map has to theme the map tiles too, and shipping a toggle that changes the
- * chrome but not the map looks broken. When the tile style gets a dark variant,
- * this is the one place a stored preference plugs in.
- */
 export function ThemeProvider({children}: PropsWithChildren): React.JSX.Element {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-
-  const theme = useMemo<Theme>(
-    () => ({
-      colors: isDark ? darkColors : lightColors,
-      spacing,
-      radius,
-      typography,
-      layout,
-      durations,
-      isDark,
-    }),
-    [isDark],
-  );
-
-  return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={nocturne}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): Theme {

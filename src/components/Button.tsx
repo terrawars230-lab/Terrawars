@@ -3,7 +3,6 @@ import React from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   View,
   type PressableProps,
   type StyleProp,
@@ -43,19 +42,35 @@ export function Button({
   const styles = useStyles();
   const isDisabled = disabled || loading;
 
-  const backgroundByVariant: Record<ButtonVariant, string> = {
+  // Nocturne's buttons are outlines, not fills: the accent is a *line* colour,
+  // and a screen of accent-filled slabs over a near-black ground is where the
+  // system stops looking like itself. `danger` stays filled — a destructive
+  // action is the one place the extra weight is the point.
+  const outline: Record<ButtonVariant, string | undefined> = {
     primary: theme.colors.accent,
-    secondary: theme.colors.surfaceElevated,
-    ghost: 'transparent',
-    danger: theme.colors.danger,
+    secondary: theme.colors.border,
+    ghost: undefined,
+    danger: undefined,
   };
 
   const labelColorByVariant: Record<ButtonVariant, Parameters<typeof Text>[0]['color']> = {
-    primary: 'onAccent',
+    primary: 'accent',
     secondary: 'textPrimary',
     ghost: 'accent',
     danger: 'textInverse',
   };
+
+  // NFR-10 and the design agree here, but only because the pressed state is
+  // themed: a default platform highlight over a translucent outline reads as a
+  // rendering glitch on this ground.
+  const pressedFill: Record<ButtonVariant, string> = {
+    primary: theme.colors.accentWash,
+    secondary: theme.colors.pressedWash,
+    ghost: theme.colors.accentWash,
+    danger: theme.colors.danger,
+  };
+
+  const borderColor = outline[variant];
 
   return (
     <Pressable
@@ -69,19 +84,17 @@ export function Button({
         styles.base,
         size === 'medium' && styles.medium,
         fullWidth && styles.fullWidth,
-        {backgroundColor: backgroundByVariant[variant]},
-        variant === 'secondary' && {
-          borderWidth: StyleSheet.hairlineWidth,
-          borderColor: theme.colors.border,
-        },
-        pressed && !isDisabled && styles.pressed,
+        variant === 'danger' && {backgroundColor: theme.colors.danger},
+        borderColor !== undefined && {borderWidth: 1, borderColor},
+        pressed && !isDisabled && {backgroundColor: pressedFill[variant]},
+        pressed && variant === 'danger' && styles.pressed,
         isDisabled && styles.disabled,
         style,
       ]}
       {...rest}>
       {loading ? (
         <ActivityIndicator
-          color={variant === 'primary' ? theme.colors.onAccent : theme.colors.accent}
+          color={variant === 'danger' ? theme.colors.textInverse : theme.colors.accent}
         />
       ) : (
         <View style={styles.content}>

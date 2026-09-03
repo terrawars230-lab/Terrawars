@@ -44,7 +44,12 @@ export function Text({
         {
           fontSize: token.fontSize,
           lineHeight: token.lineHeight,
-          fontWeight: token.fontWeight as TextStyle['fontWeight'],
+          fontWeight: token.fontWeight,
+          // Kickers and metric labels carry their tracking and casing in the
+          // token, so "uppercase, letter-spaced" is one variant name at the call
+          // site rather than three properties a screen can get subtly wrong.
+          letterSpacing: token.letterSpacing,
+          textTransform: token.textTransform,
           color: theme.colors[color],
           textAlign: align,
         },

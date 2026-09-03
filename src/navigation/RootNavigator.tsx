@@ -36,12 +36,15 @@ import type {MainTabParamList, RootStackParamList} from './types';
  */
 type TabIconProps = {color: string; size: number};
 
-const MapTabIcon = ({color, size}: TabIconProps) => <Icon name="map" color={color} size={size} />;
-const LeaderboardTabIcon = ({color, size}: TabIconProps) => (
-  <Icon name="trophy" color={color} size={size} />
+/** Nocturne draws the tab icons at 21, a step down from the 24 grid. */
+const TAB_ICON_SIZE = 21;
+
+const MapTabIcon = ({color}: TabIconProps) => <Icon name="map" color={color} size={TAB_ICON_SIZE} />;
+const LeaderboardTabIcon = ({color}: TabIconProps) => (
+  <Icon name="trophy" color={color} size={TAB_ICON_SIZE} />
 );
-const ProfileTabIcon = ({color, size}: TabIconProps) => (
-  <Icon name="user" color={color} size={size} />
+const ProfileTabIcon = ({color}: TabIconProps) => (
+  <Icon name="user" color={color} size={TAB_ICON_SIZE} />
 );
 
 /**
@@ -175,13 +178,18 @@ function MainTabs(): React.JSX.Element {
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: theme.colors.accent,
-        tabBarInactiveTintColor: theme.colors.textTertiary,
+        tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle: {
           backgroundColor: theme.colors.surface,
           borderTopColor: theme.colors.border,
+          borderTopWidth: 1,
         },
-        // NFR-10: tab labels must scale with the system font size.
-        tabBarLabelStyle: {fontSize: theme.typography.caption.fontSize},
+        // NFR-10: tab labels must scale with the system font size, so this sets
+        // the size and lets it grow rather than pinning a height on the bar.
+        tabBarLabelStyle: {
+          fontSize: theme.typography.tiny.fontSize,
+          fontWeight: theme.typography.tiny.fontWeight,
+        },
       }}>
       <Tabs.Screen
         name="MapTab"
