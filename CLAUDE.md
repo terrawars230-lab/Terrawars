@@ -48,6 +48,8 @@ npm run typecheck      # tsc --noEmit
 npm run lint           # ESLint, --max-warnings 0
 npm test               # Jest
 npm run test:coverage  # enforces the src/geo/ coverage gate
+npm run release:check  # validates the .env about to be compiled into a store build
+npm run icons          # regenerates every raster icon (python + numpy)
 ```
 
 Run a single test: `npm test -- src/geo/__tests__/loopDetection.test.ts` or
@@ -77,6 +79,17 @@ supabase/
 ```
 
 - [index.js](index.js) registers [src/app/App.tsx](src/app/App.tsx) via `AppRegistry`.
+- **Walk recording runs outside React.** [src/features/walk/services/walkRecorder.ts](src/features/walk/services/walkRecorder.ts)
+  subscribes to the native tracker once, at app start, and owns start /
+  pause / resume / finish / discard. Screens call it; they never subscribe to
+  the tracker themselves — a screen that unmounts must not stop a walk.
+- **Per-user state is cleared through [src/core/session/session.ts](src/core/session/session.ts)**
+  (`onSignedOut`). New per-user caches register a cleanup there; never call
+  `storage.clearAll()` on sign-out.
+- The query client is the singleton in [src/core/api/queryClient.ts](src/core/api/queryClient.ts).
+- Release and store compliance: [docs/RELEASE.md](docs/RELEASE.md),
+  [docs/store/](docs/store/README.md), audit in [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
+  Version lives in `app.json` (`version`, `buildNumber`) and is read by Gradle.
 - Native: [android/app/src/main/java/com/terrawars/location/](android/app/src/main/java/com/terrawars/location/)
   (Kotlin foreground service) and [ios/TerraWars/WalkTracker.swift](ios/TerraWars/WalkTracker.swift).
 - Tests live next to what they test, in `__tests__/`.

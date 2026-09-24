@@ -128,10 +128,14 @@ function ScopeTab({
 function LeaderboardRow({entry}: {entry: LeaderboardEntry}): React.JSX.Element {
   const styles = useStyles();
   const navigation = useNavigation();
+  // Territory of deleted accounts is held by the `deleted_player` tombstone,
+  // which has no public profile to open (doc 06 §5).
+  const hasProfile = entry.username.length > 0 && entry.username !== 'deleted_player';
 
   return (
     <Pressable
       accessibilityRole="button"
+      disabled={!hasProfile}
       onPress={() => navigation.navigate('PublicProfile', {username: entry.username})}
       style={styles.row}>
       <Text variant="bodyStrong" color="textTertiary" style={styles.rank}>

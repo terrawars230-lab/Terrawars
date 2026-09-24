@@ -5,13 +5,14 @@
 
   NSPrivacyCollectedDataTypes must match what TerraWars actually collects, and
   must agree with the App Privacy answers in App Store Connect
-  (docs/store/APP_STORE_PRIVACY.md) and with the privacy policy. None of it is
+  (docs/store/APP_STORE.md) and with the privacy policy. None of it is
   used for tracking or advertising.
 
     Precise location  — the route of a walk, while the walk records (FR-11).
     Email address     — the account sign-in (FR-01).
     User ID           — the account id and the public username (FR-02).
     Gameplay content  — territory, claims, scores, leaderboards.
+    Fitness           — each walk's distance, duration and pace.
     Other diagnostic  — platform and OS version sent with each walk (doc 06 §2).
 
   If a crash reporter (e.g. Sentry) is added, add Crash Data and Performance
@@ -64,6 +65,18 @@
 		<dict>
 			<key>NSPrivacyCollectedDataType</key>
 			<string>NSPrivacyCollectedDataTypeGameplayContent</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeFitness</string>
 			<key>NSPrivacyCollectedDataTypeLinked</key>
 			<true/>
 			<key>NSPrivacyCollectedDataTypeTracking</key>
