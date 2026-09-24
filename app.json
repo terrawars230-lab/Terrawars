@@ -1,4 +1,6 @@
 {
   "name": "TerraWars",
-  "displayName": "TerraWars"
+  "displayName": "TerraWars",
+  "version": "1.0.0",
+  "buildNumber": 1
 }

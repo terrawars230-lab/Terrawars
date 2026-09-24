@@ -21,6 +21,11 @@ const logger = createLogger('storage');
 const mmkv = new MMKV({id: 'terrawars.default'});
 
 export const storage = {
+  /** Whether a value exists, without reading it — cheap enough for a render. */
+  has(key: StorageKey): boolean {
+    return mmkv.contains(key);
+  },
+
   getString(key: StorageKey): string | undefined {
     return mmkv.getString(key);
   },
@@ -75,8 +80,11 @@ export const storage = {
   },
 
   /**
-   * Wipes everything. Used on sign-out and on account deletion (FR-06) so no
-   * trace of the previous user's walk survives into the next session.
+   * Wipes everything, device preferences included.
+   *
+   * Not what sign-out uses: each feature clears its own per-user keys through
+   * `onSignedOut` (core/session), so a sign-out removes the previous player's
+   * walk without also resetting this device's onboarding and preferences.
    */
   clearAll(): void {
     mmkv.clearAll();

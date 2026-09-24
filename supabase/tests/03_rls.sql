@@ -117,6 +117,103 @@ begin
 end;
 $$;
 
+select test.section('walks — the client writes only the columns it owns');
+
+do $$
+declare
+  v_writable text;
+begin
+  -- Everything a claim is judged on, or that records the judgement, is
+  -- finish_walk's alone (doc 06 §1). None of it may be client-writable.
+  select string_agg(col, ', ')
+    into v_writable
+    from unnest(array[
+           'integrity', 'distance_m', 'duration_s', 'avg_speed_mps', 'max_speed_mps',
+           'point_count', 'path', 'reject_reason', 'user_id', 'started_at', 'device_meta'
+         ]) as col
+   where has_column_privilege('authenticated', 'public.walks', col, 'UPDATE');
+
+  perform test.eq(v_writable, null::text,
+                  'doc 06 §1: no judged walk column is client-updatable');
+
+  select string_agg(col, ', ')
+    into v_writable
+    from unnest(array[
+           'integrity', 'status', 'distance_m', 'duration_s', 'path', 'point_count',
+           'reject_reason', 'ended_at'
+         ]) as col
+   where has_column_privilege('authenticated', 'public.walks', col, 'INSERT');
+
+  perform test.eq(v_writable, null::text,
+                  'doc 06 §1: a client cannot insert a walk with judged columns pre-filled');
+
+  perform test.ok(
+    has_column_privilege('authenticated', 'public.walks', 'client_walk_id', 'INSERT')
+      and has_column_privilege('authenticated', 'public.walks', 'status', 'UPDATE'),
+    'startWalk and abandonWalk still have the columns they need');
+end;
+$$;
+
+do $$
+declare
+  v_user    uuid := test.create_player('walker_grants');
+  v_walk    uuid;
+  v_blocked boolean := false;
+begin
+  perform test.act_as(v_user);
+  perform set_config('role', 'authenticated', true);
+
+  -- Exactly what walkApi.startWalk() sends.
+  insert into public.walks (user_id, client_walk_id, started_at, device_meta)
+  values (v_user, extensions.gen_random_uuid(), now(), '{"platform":"android"}'::jsonb)
+  returning id into v_walk;
+
+  begin
+    update public.walks set integrity = '{"clean":true}'::jsonb where id = v_walk;
+  exception
+    when insufficient_privilege then
+      v_blocked := true;
+  end;
+
+  perform set_config('role', 'none', true);
+  perform test.ok(v_blocked, 'doc 06 §2: a client cannot write its own integrity signals');
+  perform test.act_as(null);
+end;
+$$;
+
+do $$
+declare
+  v_user    uuid := test.create_player('walker_status');
+  v_walk    uuid;
+  v_blocked boolean := false;
+begin
+  perform test.act_as(v_user);
+  perform set_config('role', 'authenticated', true);
+
+  insert into public.walks (user_id, client_walk_id, started_at)
+  values (v_user, extensions.gen_random_uuid(), now())
+  returning id into v_walk;
+
+  begin
+    -- Only finish_walk may complete a walk (doc 03 §6).
+    update public.walks set status = 'completed' where id = v_walk;
+  exception
+    when insufficient_privilege then
+      v_blocked := true;
+  end;
+
+  perform test.ok(v_blocked, 'a client cannot mark its own walk completed');
+
+  -- FR-17: abandoning is the one transition the client makes.
+  update public.walks set status = 'abandoned', ended_at = now() where id = v_walk;
+
+  perform set_config('role', 'none', true);
+  perform test.eq((select status::text from public.walks where id = v_walk), 'abandoned',
+                  'FR-17: a client can still abandon its own active walk');
+  perform test.act_as(null);
+end;
+$$;
+
 select test.section('there is no public view over walks');
 
 do $$

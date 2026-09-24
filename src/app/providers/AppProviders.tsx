@@ -1,20 +1,26 @@
-import React, {useEffect, useMemo, type PropsWithChildren} from 'react';
+import React, {useEffect, type PropsWithChildren} from 'react';
 
 import {StyleSheet} from 'react-native';
 
-import {NavigationContainer} from '@react-navigation/native';
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {DarkTheme, NavigationContainer, type Theme as NavigationTheme} from '@react-navigation/native';
+import {QueryClientProvider} from '@tanstack/react-query';
 import {I18nextProvider} from 'react-i18next';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 
 import {ErrorBoundary} from '@components/index';
-import {ApiError} from '@core/api/ApiError';
+import {bindQueryClientToAppLifecycle, queryClient} from '@core/api/queryClient';
 import {startAuthAutoRefresh} from '@core/api/supabase/client';
 import {i18n, initI18n} from '@core/i18n/index';
+import {installGlobalErrorHandler} from '@core/logger/globalErrorHandler';
 import {ThemeProvider} from '@core/theme/ThemeProvider';
+import {nocturneColors} from '@core/theme/tokens';
 import {useAuthStore} from '@features/auth/store/authStore';
-import {startQueueAutoFlush} from '@features/walk/services/claimQueue';
+import {flushQueue, onClaimFlushed, startQueueAutoFlush} from '@features/walk/services/claimQueue';
+import {
+  invalidateTerritoryQueries,
+  startWalkRecorderService,
+} from '@features/walk/services/walkRecorder';
 import {linking} from '@navigation/linking';
 
 /**
@@ -27,59 +33,60 @@ import {linking} from '@navigation/linking';
  *  - `NavigationContainer` innermost, so a navigation crash is caught.
  */
 
+installGlobalErrorHandler();
 initI18n();
 
 /**
- * React Query defaults, tuned for a phone on mobile data.
+ * The navigator's own colours, from Nocturne.
  *
- * The retry policy is the important one: doc 05 §7 says a 422 claim rejection
- * is a normal outcome and only 5xx deserves a retry. Retrying a rule rejection
- * would burn the user's battery re-asking a question with a fixed answer.
+ * Without this, react-navigation paints its default light theme behind every
+ * screen transition and header — a white flash between two dark screens.
  */
-function createQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: (failureCount, error) => {
-          if (ApiError.isApiError(error)) {
-            return error.isRetryable && failureCount < 3;
-          }
-          return failureCount < 2;
-        },
-        retryDelay: attempt => Math.min(1000 * 2 ** attempt, 30_000),
-        // Location-driven data goes stale fast; everything overrides this.
-        staleTime: 30_000,
-        gcTime: 5 * 60_000,
-        // A walker's phone loses and regains signal constantly. Refetching on
-        // every reconnect would hammer the API for data that has not changed.
-        refetchOnReconnect: 'always',
-        refetchOnWindowFocus: false,
-      },
-      mutations: {
-        // A mutation retried blindly can double-apply. Every mutating endpoint
-        // takes an idempotency key (NFR-06), and the caller decides when to
-        // reuse it — never this default.
-        retry: false,
-      },
-    },
-  });
-}
+const navigationTheme: NavigationTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    primary: nocturneColors.accent,
+    background: nocturneColors.background,
+    card: nocturneColors.surface,
+    text: nocturneColors.textPrimary,
+    border: nocturneColors.border,
+    notification: nocturneColors.danger,
+  },
+};
 
 export function AppProviders({children}: PropsWithChildren): React.JSX.Element {
-  const queryClient = useMemo(createQueryClient, []);
   const initialiseAuth = useAuthStore(state => state.initialise);
 
   useEffect(() => {
     // Order matters: the auth subscription must exist before anything reads a
-    // session, and the queue flush needs a session to submit against.
+    // session, and the recorder must be listening before any walk can start.
     const unsubscribeAuth = initialiseAuth();
     const stopAutoRefresh = startAuthAutoRefresh();
+    const unbindQueryClient = bindQueryClientToAppLifecycle();
+    const stopRecorder = startWalkRecorderService();
     const stopQueueFlush = startQueueAutoFlush();
 
+    // A claim that lands from the offline queue changes the map and the
+    // player's totals exactly like one submitted live (FR-32).
+    const unsubscribeFlushed = onClaimFlushed(() => invalidateTerritoryQueries());
+
+    // FR-20: the queue can only submit with a session. Flush the moment one
+    // appears, rather than waiting for the next connectivity change.
+    const unsubscribeStatus = useAuthStore.subscribe((state, previous) => {
+      if (state.status === 'signedIn' && previous.status !== 'signedIn') {
+        void flushQueue();
+      }
+    });
+
     return () => {
-      unsubscribeAuth();
-      stopAutoRefresh();
+      unsubscribeStatus();
+      unsubscribeFlushed();
       stopQueueFlush();
+      stopRecorder();
+      unbindQueryClient();
+      stopAutoRefresh();
+      unsubscribeAuth();
     };
   }, [initialiseAuth]);
 
@@ -90,7 +97,9 @@ export function AppProviders({children}: PropsWithChildren): React.JSX.Element {
           <I18nextProvider i18n={i18n}>
             <QueryClientProvider client={queryClient}>
               <ErrorBoundary scope="root">
-                <NavigationContainer linking={linking}>{children}</NavigationContainer>
+                <NavigationContainer linking={linking} theme={navigationTheme}>
+                  {children}
+                </NavigationContainer>
               </ErrorBoundary>
             </QueryClientProvider>
           </I18nextProvider>
@@ -101,5 +110,5 @@ export function AppProviders({children}: PropsWithChildren): React.JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
+  root: {flex: 1, backgroundColor: nocturneColors.background},
 });

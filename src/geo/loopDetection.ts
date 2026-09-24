@@ -14,10 +14,10 @@ import {haversineDistanceM, pathLengthM, toLocalPlane} from './measurement';
  *       then the sub-path between the two crossing segments and everything
  *       before the intersection is discarded.
  *
- * FR-18 needs this to feel instant while walking, so `detectLoop` is written to
- * be called incrementally: `findSelfIntersection` only tests the newest segment
- * against earlier ones, which is O(n) per new point rather than O(n²) over the
- * whole path.
+ * FR-18 needs this to feel instant while walking, and the preview runs it over
+ * the whole path every few samples. `findSelfIntersection` therefore indexes
+ * the path on a spatial grid, so each segment is compared only with its
+ * neighbours — near-linear in practice rather than O(n²) over the whole path.
  */
 
 export type LoopKind = 'return-to-start' | 'self-intersection';
@@ -96,10 +96,22 @@ export interface SelfIntersection {
  *
  * Scanning backwards matters for the incremental case: the crossing a walker
  * just made is at the end of the path, so it is found in the first few
- * comparisons instead of after a full quadratic sweep.
+ * comparisons instead of after a full sweep.
  *
  * Adjacent segments are skipped — they share a vertex by construction and would
  * otherwise report a false crossing at every single point.
+ *
+ * The result is exactly that of testing every later segment against every
+ * earlier one: the newest segment that crosses anything, paired with the
+ * newest earlier segment it crosses. What changed is the cost. The preview
+ * calls this on the whole path every few samples, and until a loop closes
+ * there is no crossing to stop at early — so the exhaustive version was a full
+ * O(n²) sweep that also re-projected both segments for every pair. At a few
+ * thousand points that is millions of allocations per call, and a JS thread
+ * stalled for seconds mid-walk on the low-end phones of the launch market.
+ * Now each point is projected once, and each segment is only tested against
+ * the segments that share a grid cell with it, since two segments can only
+ * cross where their bounding boxes overlap.
  */
 export function findSelfIntersection(path: readonly LatLng[]): SelfIntersection | null {
   const segmentCount = path.length - 1;
@@ -111,30 +123,153 @@ export function findSelfIntersection(path: readonly LatLng[]): SelfIntersection 
   // equirectangular error is millimetres, and working in metres keeps the
   // degenerate-segment epsilon below meaningful in a unit we can reason about.
   const origin = path[0]!;
+  const planar = path.map(point => toLocalPlane(point, origin));
+  const index = buildSegmentIndex(planar, segmentCount);
+
+  // Which `later` last looked at each segment, so a segment registered in
+  // several cells is tested once per `later` rather than once per cell.
+  const visitedBy = new Int32Array(segmentCount).fill(-1);
 
   for (let later = segmentCount - 1; later >= 2; later--) {
-    const laterStart = toLocalPlane(path[later]!, origin);
-    const laterEnd = toLocalPlane(path[later + 1]!, origin);
+    const laterStart = planar[later]!;
+    const laterEnd = planar[later + 1]!;
 
-    for (let earlier = later - 2; earlier >= 0; earlier--) {
-      const earlierStart = toLocalPlane(path[earlier]!, origin);
-      const earlierEnd = toLocalPlane(path[earlier + 1]!, origin);
+    let bestEarlier = -1;
+    let bestT = 0;
+
+    const consider = (earlier: number): void => {
+      if (earlier > later - 2 || earlier <= bestEarlier || visitedBy[earlier] === later) {
+        return;
+      }
+      visitedBy[earlier] = later;
+
+      const earlierStart = planar[earlier]!;
+      const earlierEnd = planar[earlier + 1]!;
+      if (!boundsOverlap(earlierStart, earlierEnd, laterStart, laterEnd)) {
+        return;
+      }
 
       const hit = segmentIntersection(earlierStart, earlierEnd, laterStart, laterEnd);
       if (hit) {
-        return {
-          earlierSegmentIndex: earlier,
-          laterSegmentIndex: later,
-          point: {
-            lat: path[earlier]!.lat + (path[earlier + 1]!.lat - path[earlier]!.lat) * hit.tEarlier,
-            lng: path[earlier]!.lng + (path[earlier + 1]!.lng - path[earlier]!.lng) * hit.tEarlier,
-          },
-        };
+        bestEarlier = earlier;
+        bestT = hit.tEarlier;
       }
+    };
+
+    const cells = index.cellsOf[later];
+    if (cells === null || cells === undefined) {
+      // An oversized segment — a GPS gap bridged by one long line — is simply
+      // tested against everything before it. Rare, so the cost is too.
+      for (let earlier = later - 2; earlier >= 0; earlier--) {
+        consider(earlier);
+      }
+    } else {
+      for (const cell of cells) {
+        for (const earlier of index.segmentsIn.get(cell) ?? []) {
+          consider(earlier);
+        }
+      }
+      for (const earlier of index.oversized) {
+        consider(earlier);
+      }
+    }
+
+    if (bestEarlier >= 0) {
+      return {
+        earlierSegmentIndex: bestEarlier,
+        laterSegmentIndex: later,
+        point: {
+          lat: path[bestEarlier]!.lat + (path[bestEarlier + 1]!.lat - path[bestEarlier]!.lat) * bestT,
+          lng: path[bestEarlier]!.lng + (path[bestEarlier + 1]!.lng - path[bestEarlier]!.lng) * bestT,
+        },
+      };
     }
   }
 
   return null;
+}
+
+/**
+ * Grid cell size, metres. A few walking segments across (samples are 5–15 m
+ * apart), so most segments land in one to four cells.
+ */
+const CELL_SIZE_M = 20;
+
+/** A segment spanning more cells than this is tested against everything instead. */
+const MAX_CELLS_PER_SEGMENT = 64;
+
+/**
+ * Bounding boxes are widened by this before being mapped to cells, so a
+ * crossing that falls exactly on a cell boundary can never be missed to
+ * floating-point rounding.
+ */
+const CELL_PADDING_M = 1e-6;
+
+/** Offsets cell coordinates into positive range so (x, y) packs into one number. */
+const CELL_OFFSET = 2 ** 20;
+const CELL_SPAN = 2 ** 21;
+
+interface SegmentIndex {
+  /** Cell key → segments whose bounding box touches that cell. */
+  segmentsIn: Map<number, number[]>;
+  /** Per segment, the cells it was registered in; `null` when oversized. */
+  cellsOf: (number[] | null)[];
+  /** Segments too long to register cell by cell. */
+  oversized: number[];
+}
+
+function buildSegmentIndex(planar: readonly PlanarPoint[], segmentCount: number): SegmentIndex {
+  const segmentsIn = new Map<number, number[]>();
+  const cellsOf: (number[] | null)[] = new Array(segmentCount);
+  const oversized: number[] = [];
+
+  for (let segment = 0; segment < segmentCount; segment++) {
+    const a = planar[segment]!;
+    const b = planar[segment + 1]!;
+
+    const minCellX = Math.floor((Math.min(a.x, b.x) - CELL_PADDING_M) / CELL_SIZE_M);
+    const maxCellX = Math.floor((Math.max(a.x, b.x) + CELL_PADDING_M) / CELL_SIZE_M);
+    const minCellY = Math.floor((Math.min(a.y, b.y) - CELL_PADDING_M) / CELL_SIZE_M);
+    const maxCellY = Math.floor((Math.max(a.y, b.y) + CELL_PADDING_M) / CELL_SIZE_M);
+
+    if ((maxCellX - minCellX + 1) * (maxCellY - minCellY + 1) > MAX_CELLS_PER_SEGMENT) {
+      cellsOf[segment] = null;
+      oversized.push(segment);
+      continue;
+    }
+
+    const cells: number[] = [];
+    for (let cellX = minCellX; cellX <= maxCellX; cellX++) {
+      for (let cellY = minCellY; cellY <= maxCellY; cellY++) {
+        const key = (cellX + CELL_OFFSET) * CELL_SPAN + (cellY + CELL_OFFSET);
+        cells.push(key);
+        const bucket = segmentsIn.get(key);
+        if (bucket) {
+          bucket.push(segment);
+        } else {
+          segmentsIn.set(key, [segment]);
+        }
+      }
+    }
+    cellsOf[segment] = cells;
+  }
+
+  return {segmentsIn, cellsOf, oversized};
+}
+
+/** Cheap rejection before the exact test: disjoint boxes cannot cross. */
+function boundsOverlap(
+  a1: PlanarPoint,
+  a2: PlanarPoint,
+  b1: PlanarPoint,
+  b2: PlanarPoint,
+): boolean {
+  return (
+    Math.max(a1.x, a2.x) >= Math.min(b1.x, b2.x) &&
+    Math.max(b1.x, b2.x) >= Math.min(a1.x, a2.x) &&
+    Math.max(a1.y, a2.y) >= Math.min(b1.y, b2.y) &&
+    Math.max(b1.y, b2.y) >= Math.min(a1.y, a2.y)
+  );
 }
 
 interface PlanarPoint {

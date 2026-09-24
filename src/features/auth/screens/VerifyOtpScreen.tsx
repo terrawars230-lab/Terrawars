@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 
 import {TextInput, View} from 'react-native';
 
@@ -8,15 +8,18 @@ import {useTranslation} from 'react-i18next';
 import {Button, Screen, Text} from '@components/index';
 import {ApiError} from '@core/api/ApiError';
 import {errorMessageKey} from '@core/constants/errorCodes';
+import {useCooldown} from '@core/hooks/useCooldown';
 import {useTheme} from '@core/theme/ThemeProvider';
 import type {RootStackParamList} from '@navigation/types';
 
 import {sendPasswordReset, verifyPasswordResetOtp} from '../api/authApi';
 import {useAuthStore} from '../store/authStore';
+import {OTP_LENGTH, sanitiseOtp} from '../utils/validation';
 
 import {useAuthFormStyles} from './authFormStyles';
 
-const OTP_LENGTH = 6;
+/** Seconds before "send a new code" is allowed again. */
+const RESEND_COOLDOWN_S = 60;
 
 /**
  * Step 2 of 3: exchange the emailed code for a session.
@@ -38,20 +41,40 @@ export function VerifyOtpScreen(): React.JSX.Element {
   const [notice, setNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isResending, setIsResending] = useState(false);
+  const {remaining: cooldownRemaining, start: startCooldown} = useCooldown(RESEND_COOLDOWN_S);
+
+  // Leaving this screen by ANY route — the back button, the Android back key,
+  // the iOS swipe — abandons the recovery, so the flag comes down with it.
+  // Only the button used to lower it; a swipe left it raised, and the user's
+  // next ordinary sign-in landed on a "choose a new password" screen they
+  // never asked for. A successful verify swaps the whole navigator instead of
+  // removing this screen, so it does not trip this.
+  const verified = useRef(false);
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', () => {
+        if (!verified.current) {
+          setRecoveringPassword(false);
+        }
+      }),
+    [navigation, setRecoveringPassword],
+  );
 
   const handleVerify = useCallback(async () => {
     setError(null);
     setNotice(null);
 
     if (token.length !== OTP_LENGTH) {
-      setError(t('passwordReset.otpTooShort'));
+      setError(t('passwordReset.otpTooShort', {length: OTP_LENGTH}));
       return;
     }
 
     setIsSubmitting(true);
     try {
+      verified.current = true;
       await verifyPasswordResetOtp(email, token);
     } catch (caught) {
+      verified.current = false;
       setError(ApiError.isApiError(caught) ? t(errorMessageKey(caught.code)) : t('errors.UNKNOWN'));
     } finally {
       setIsSubmitting(false);
@@ -65,17 +88,20 @@ export function VerifyOtpScreen(): React.JSX.Element {
     try {
       await sendPasswordReset(email);
       setNotice(t('passwordReset.resent'));
+      startCooldown();
     } catch (caught) {
       setError(ApiError.isApiError(caught) ? t(errorMessageKey(caught.code)) : t('errors.UNKNOWN'));
     } finally {
       setIsResending(false);
     }
-  }, [email, t]);
+  }, [email, startCooldown, t]);
 
   return (
     <Screen scrollable>
       <View style={styles.container}>
-        <Text variant="display">{t('passwordReset.otpTitle')}</Text>
+        <Text variant="display" accessibilityRole="header">
+          {t('passwordReset.otpTitle')}
+        </Text>
         <Text variant="body" color="textSecondary">
           {t('passwordReset.otpSubtitle', {email})}
         </Text>
@@ -86,10 +112,7 @@ export function VerifyOtpScreen(): React.JSX.Element {
             placeholder={t('passwordReset.otpPlaceholder')}
             placeholderTextColor={theme.colors.textTertiary}
             value={token}
-            // Stripped rather than validated: iOS autofill pastes the code with
-            // surrounding words, and a paste that silently fails validation is
-            // worse than one that keeps the digits.
-            onChangeText={value => setToken(value.replace(/\D/g, '').slice(0, OTP_LENGTH))}
+            onChangeText={value => setToken(sanitiseOtp(value))}
             keyboardType="number-pad"
             autoComplete="one-time-code"
             textContentType="oneTimeCode"
@@ -123,24 +146,19 @@ export function VerifyOtpScreen(): React.JSX.Element {
             }}
           />
           <Button
-            label={t('passwordReset.resend')}
+            label={
+              cooldownRemaining > 0
+                ? t('auth.resendIn', {seconds: cooldownRemaining})
+                : t('passwordReset.resend')
+            }
             variant="ghost"
             loading={isResending}
+            disabled={cooldownRemaining > 0}
             onPress={() => {
               void handleResend();
             }}
           />
-          <Button
-            label={t('common.back')}
-            variant="ghost"
-            onPress={() => {
-              // Leaving here abandons the recovery, so the flag has to come
-              // down with it — otherwise a later sign-in lands on the
-              // new-password screen with nothing to reset.
-              setRecoveringPassword(false);
-              navigation.goBack();
-            }}
-          />
+          <Button label={t('common.back')} variant="ghost" onPress={() => navigation.goBack()} />
         </View>
       </View>
     </Screen>

@@ -1,3 +1,5 @@
+import {Platform} from 'react-native';
+
 import {ApiError} from '@core/api/ApiError';
 import {parseErrorEnvelope, toApiError} from '@core/api/errorMapping';
 import {supabase} from '@core/api/supabase/client';
@@ -21,23 +23,40 @@ export interface StartWalkResult {
   resumed: boolean;
 }
 
+/** Postgres unique_violation — here, the one-active-walk-per-user index. */
+const UNIQUE_VIOLATION = '23505';
+
 /**
- * Starts a walk, or resumes the one already open.
+ * Starts a walk.
  *
- * `client_walk_id` makes this idempotent (NFR-06): a retry over a flaky link
- * returns the same walk instead of tripping the one-active-walk-per-user index
- * and stranding the user with a 409 they cannot clear.
+ * `client_walk_id` makes this idempotent (NFR-06): a retry over a flaky link,
+ * whose first attempt did reach the server, finds its own walk and returns it
+ * instead of tripping the one-active-walk-per-user index.
+ *
+ * An active walk with a DIFFERENT client id is one this device no longer has
+ * the points for — a discarded interrupted walk, a reinstall, a walk started
+ * on another phone. It is abandoned rather than resumed: resuming it would
+ * restart `seq` at 0 on top of the points it already holds, and the upsert's
+ * ignore-duplicates would then silently drop the new route wherever the
+ * numbers collide, stitching two walks into one corrupted path.
  */
 export async function startWalk(clientWalkId: string): Promise<StartWalkResult> {
-  const userId = (await supabase.auth.getUser()).data.user?.id;
+  // The local session, not getUser(): that is a network round trip to the
+  // auth server on every walk start, and RLS checks the id server-side anyway.
+  const {data: sessionData} = await supabase.auth.getSession();
+  const userId = sessionData.session?.user.id;
   if (!userId) {
     throw new ApiError('UNAUTHENTICATED', 'Sign in to start a walk');
   }
 
   const existing = await getActiveWalk();
   if (existing) {
-    logger.info('Resuming an active walk');
-    return {walkId: existing.id, resumed: true};
+    if (existing.clientWalkId === clientWalkId) {
+      logger.info('Resuming this device’s own active walk');
+      return {walkId: existing.id, resumed: true};
+    }
+    logger.info('Abandoning an active walk this device cannot continue');
+    await abandonWalk(existing.id);
   }
 
   const {data, error} = await supabase
@@ -52,6 +71,17 @@ export async function startWalk(clientWalkId: string): Promise<StartWalkResult> 
     .single();
 
   if (error) {
+    if (error.code === UNIQUE_VIOLATION) {
+      // A concurrent start won the race for the active slot. If it was our own
+      // retry, that walk is ours; anything else is a genuine conflict.
+      const winner = await getActiveWalk();
+      if (winner && winner.clientWalkId === clientWalkId) {
+        return {walkId: winner.id, resumed: true};
+      }
+      throw new ApiError('ACTIVE_WALK_EXISTS', 'Another walk is already in progress', {
+        cause: error,
+      });
+    }
     throw toApiError(error, 'Could not start the walk');
   }
   return {walkId: data.id, resumed: false};
@@ -59,20 +89,23 @@ export async function startWalk(clientWalkId: string): Promise<StartWalkResult> 
 
 export interface ActiveWalk {
   id: string;
+  clientWalkId: string | null;
   startedAt: string;
 }
 
 export async function getActiveWalk(): Promise<ActiveWalk | null> {
   const {data, error} = await supabase
     .from('walks')
-    .select('id, started_at')
+    .select('id, client_walk_id, started_at')
     .eq('status', 'active')
     .maybeSingle();
 
   if (error) {
     throw toApiError(error, 'Could not check for an active walk');
   }
-  return data ? {id: data.id, startedAt: data.started_at} : null;
+  return data
+    ? {id: data.id, clientWalkId: data.client_walk_id, startedAt: data.started_at}
+    : null;
 }
 
 /**
@@ -268,7 +301,6 @@ export async function abandonWalk(walkId: string): Promise<void> {
  * a person by across accounts.
  */
 function deviceMeta(): Record<string, string> {
-  const {Platform} = require('react-native') as typeof import('react-native');
   return {
     platform: Platform.OS,
     os_version: String(Platform.Version),

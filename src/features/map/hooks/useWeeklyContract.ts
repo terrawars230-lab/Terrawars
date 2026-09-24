@@ -26,11 +26,13 @@ export interface WeeklyContract {
 }
 
 export function useWeeklyContract(enabled: boolean): WeeklyContract {
+  // `placeholderData`, not `initialData`: initial data counts as fresh, which
+  // kept the live target from being fetched for the first five minutes.
   const {data: config} = useQuery({
     queryKey: queryKeys.gameConfig,
     queryFn: fetchGameConfig,
     staleTime: 5 * 60_000,
-    initialData: cachedGameConfig,
+    placeholderData: cachedGameConfig,
   });
 
   const {data: weekly, isLoading} = useQuery({

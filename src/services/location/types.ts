@@ -22,6 +22,13 @@ export interface TrackingOptions {
    */
   notificationTitle: string;
   notificationBody: string;
+  /**
+   * Walking time already on the clock, excluding pauses (FR-16). Non-zero when
+   * a recovered walk (FR-15) restarts the tracker, so the Android
+   * notification's running timer continues from where the HUD is rather than
+   * from zero.
+   */
+  elapsedMs?: number;
 }
 
 /** Why tracking stopped without the app asking it to. */

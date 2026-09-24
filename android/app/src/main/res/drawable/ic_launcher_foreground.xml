@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground (108dp canvas; the launcher mask keeps the middle
+     66dp). The mark: a walked loop of territory with a map pin standing on it.
+     Colours are Nocturne's accent (#9184D9) and accent-800 (#423A6A). The same
+     geometry is rasterised for the iOS and Play Store icons by
+     scripts/generate-icons.py — change both together. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Territory: the enclosed loop. -->
+    <path
+        android:fillColor="#423A6A"
+        android:strokeColor="#9184D9"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round"
+        android:pathData="M31,62 L44,41 L70,43 L80,64 L56,79 Z" />
+    <!-- The pin. -->
+    <path
+        android:fillColor="#D2CEFD"
+        android:fillType="evenOdd"
+        android:pathData="M54,76 C54,76 39,59.5 39,47 C39,38.72 45.72,32 54,32 C62.28,32 69,38.72 69,47 C69,59.5 54,76 54,76 Z M54,53 C57.31,53 60,50.31 60,47 C60,43.69 57.31,41 54,41 C50.69,41 48,43.69 48,47 C48,50.31 50.69,53 54,53 Z" />
+</vector>

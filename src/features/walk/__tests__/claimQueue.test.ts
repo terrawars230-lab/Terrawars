@@ -2,6 +2,7 @@ import NetInfo from '@react-native-community/netinfo';
 
 import {ApiError} from '@core/api/ApiError';
 import {WALK_LIMITS} from '@core/constants/gameConfig';
+import {setSessionUserId} from '@core/session/session';
 import {storage} from '@core/storage/storage';
 import {StorageKeys} from '@core/storage/storageKeys';
 import type {GpsSample} from '@core/types/geo';
@@ -37,8 +38,12 @@ function acceptedResult() {
   return {status: 'accepted', claimId: 'claim-1', netAreaGainM2: 41_000};
 }
 
+const PLAYER = 'user-1';
+
 beforeEach(() => {
   storage.clearAll();
+  // The queue only ever submits for the signed-in account.
+  setSessionUserId(PLAYER);
   walkApi.uploadPoints.mockReset().mockResolvedValue(1);
   walkApi.finishWalk.mockReset().mockResolvedValue(acceptedResult());
   netInfo.fetch.mockReset().mockResolvedValue({isConnected: true, isInternetReachable: true});
@@ -217,6 +222,47 @@ describe('claimQueue', () => {
 
       expect(results).toHaveLength(1);
       expect(queuedClaimCount()).toBe(1);
+    });
+
+    it('submits nothing while signed out, and keeps the entry for later', async () => {
+      enqueueClaim({walkId: 'walk-1', idempotencyKey: 'key-1', samples: [sample(0)]});
+      setSessionUserId(null);
+
+      await expect(flushQueue()).resolves.toEqual([]);
+
+      expect(walkApi.finishWalk).not.toHaveBeenCalled();
+      setSessionUserId(PLAYER);
+      expect(queuedClaimCount()).toBe(1);
+    });
+
+    it("never submits another account's walk under this session", async () => {
+      // Queued by one player, who then signed out; a second player signs in on
+      // the same phone. Their session must not carry the first player's claim.
+      enqueueClaim({walkId: 'walk-a', idempotencyKey: 'key-a', samples: [sample(0)]});
+      setSessionUserId('user-2');
+      enqueueClaim({walkId: 'walk-b', idempotencyKey: 'key-b', samples: [sample(0)]});
+
+      await flushQueue();
+
+      expect(walkApi.finishWalk).toHaveBeenCalledTimes(1);
+      expect(walkApi.finishWalk).toHaveBeenCalledWith('walk-b', 'key-b');
+
+      // Still waiting for its owner, and flushed when they come back.
+      setSessionUserId(PLAYER);
+      expect(queuedClaimCount()).toBe(1);
+      await flushQueue();
+      expect(walkApi.finishWalk).toHaveBeenLastCalledWith('walk-a', 'key-a');
+      expect(queuedClaimCount()).toBe(0);
+    });
+
+    it('treats an entry from before accounts were recorded as the current player’s', async () => {
+      storage.setObject(StorageKeys.pendingClaims, [
+        {walkId: 'legacy', idempotencyKey: 'key', samples: [], attempts: 0, queuedAt: Date.now()},
+      ]);
+
+      await flushQueue();
+
+      expect(walkApi.finishWalk).toHaveBeenCalledWith('legacy', 'key');
     });
 
     it('batches a long walk rather than sending one huge insert', async () => {

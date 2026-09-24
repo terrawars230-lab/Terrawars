@@ -56,7 +56,10 @@ function emit(level: LogLevel, scope: string, message: string, context?: LogCont
     }
   }
 
-  if (crashReporter && LEVEL_ORDER[level] >= LEVEL_ORDER.warn) {
+  // Errors reach the reporter through captureException in `error()` below,
+  // with the exception attached. Sending them here as a message as well would
+  // count every error twice.
+  if (crashReporter && level === 'warn') {
     crashReporter.captureMessage(`${scope}: ${message}`, level, safeContext);
   }
 }
@@ -79,7 +82,10 @@ export function createLogger(scope: string): Logger {
     warn: (message, context) => emit('warn', scope, message, context),
     error: (message, error, context) => {
       emit('error', scope, message, {...context, error: serialiseError(error)});
-      crashReporter?.captureException(error, {scope, message, ...(context ?? {})});
+      // Redacted like everything else: a crash report is the likeliest place
+      // for a coordinate to leave the device, and the least likely to be read
+      // with privacy in mind.
+      crashReporter?.captureException(error, redactContext({scope, message, ...(context ?? {})}));
     },
   };
 }
@@ -121,7 +127,17 @@ export function redactContext(context: LogContext, depth = 0): LogContext {
       result[key] = Array.isArray(value) ? `${REDACTED} (${value.length} items)` : REDACTED;
       continue;
     }
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (Array.isArray(value)) {
+      // An array under an innocent key — `samples`, `queue` — can still hold
+      // objects that carry coordinates, so its members are redacted too.
+      result[key] = value.map(item =>
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? redactContext(item as LogContext, depth + 1)
+          : item,
+      );
+      continue;
+    }
+    if (value && typeof value === 'object') {
       result[key] = redactContext(value as LogContext, depth + 1);
       continue;
     }

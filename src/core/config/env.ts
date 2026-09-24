@@ -68,10 +68,11 @@ function parseEnvironment(): AppEnvironment {
 }
 
 const appEnvironment = parseEnvironment();
+const isProduction = appEnvironment === 'production';
 
 export const env = {
   appEnvironment,
-  isProduction: appEnvironment === 'production',
+  isProduction,
   isDevelopment: appEnvironment === 'development',
 
   displayName: optionalString('APP_DISPLAY_NAME', 'TerraWars'),
@@ -91,10 +92,32 @@ export const env = {
     iosClientId: optionalString('GOOGLE_OAUTH_IOS_CLIENT_ID'),
   },
 
+  /**
+   * Public pages the stores require the app to link to (Play User Data policy,
+   * App Store guideline 5.1.1). They must be live at these URLs before
+   * submission — see docs/store/README.md.
+   */
+  links: {
+    privacyPolicy: optionalString('PRIVACY_POLICY_URL', 'https://terrawars.app/privacy'),
+    terms: optionalString('TERMS_URL', 'https://terrawars.app/terms'),
+    accountDeletion: optionalString('ACCOUNT_DELETION_URL', 'https://terrawars.app/delete-account'),
+    supportEmail: optionalString('SUPPORT_EMAIL', 'support@terrawars.app'),
+  },
+
+  /**
+   * Where the sign-up confirmation link sends the browser once the address is
+   * verified. Must be in Supabase Auth → URL Configuration → Redirect URLs.
+   * Blank falls back to the project's Site URL.
+   */
+  authEmailRedirectUrl: optionalString('AUTH_EMAIL_REDIRECT_URL'),
+
   sentryDsn: optionalString('SENTRY_DSN'),
 
   apiTimeoutMs: optionalNumber('API_TIMEOUT_MS', 15_000),
-  debugLogging: optionalBoolean('DEBUG_LOGGING', !appEnvironment.startsWith('prod')),
+  // Never in a production build, whatever the .env says: a release that chats
+  // on the console leaks data and costs battery, and a .env copied from the
+  // template ships DEBUG_LOGGING=true.
+  debugLogging: !isProduction && optionalBoolean('DEBUG_LOGGING', true),
 } as const;
 
 export type Env = typeof env;

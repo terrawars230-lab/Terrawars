@@ -3,11 +3,14 @@ import NetInfo from '@react-native-community/netinfo';
 import {ApiError} from '@core/api/ApiError';
 import {WALK_LIMITS} from '@core/constants/gameConfig';
 import {createLogger} from '@core/logger/logger';
+import {getSessionUserId} from '@core/session/session';
 import {storage} from '@core/storage/storage';
 import {StorageKeys} from '@core/storage/storageKeys';
 import type {GpsSample} from '@core/types/geo';
 
-import {finishWalk, uploadPoints, type FinishWalkResult} from '../api/walkApi';
+import {finishWalk, type FinishWalkResult} from '../api/walkApi';
+
+import {uploadInBatches} from './pointUpload';
 
 /**
  * Offline claim queue (FR-20, NFR-08).
@@ -33,6 +36,14 @@ export interface QueuedClaim {
   queuedAt: number;
   samples: GpsSample[];
   attempts: number;
+  /**
+   * The account that recorded the walk. Only that account's session ever
+   * submits it: after a sign-out and a different sign-in on the same device,
+   * the previous player's walk waits for them (until the 24 h ceiling) rather
+   * than being sent under someone else's session. Absent on entries queued by
+   * builds that predate it.
+   */
+  userId?: string | null;
 }
 
 type FlushListener = (walkId: string, result: FinishWalkResult) => void;
@@ -60,21 +71,27 @@ function withoutExpired(queue: QueuedClaim[]): QueuedClaim[] {
   return live;
 }
 
-export function enqueueClaim(entry: Omit<QueuedClaim, 'queuedAt' | 'attempts'>): void {
+export function enqueueClaim(entry: Omit<QueuedClaim, 'queuedAt' | 'attempts' | 'userId'>): void {
   const queue = withoutExpired(read());
 
   // Re-queuing the same walk replaces the entry rather than adding a second —
   // two entries for one walk would mean two finish attempts, and while the
   // server tolerates that, the user would see the result screen twice.
   const next = queue.filter(existing => existing.walkId !== entry.walkId);
-  next.push({...entry, queuedAt: Date.now(), attempts: 0});
+  next.push({...entry, userId: getSessionUserId(), queuedAt: Date.now(), attempts: 0});
 
   write(next);
   logger.info('Claim queued for later submission', {queueLength: next.length});
 }
 
+/** Queued claims belonging to the signed-in player (or to nobody known). */
 export function queuedClaimCount(): number {
-  return withoutExpired(read()).length;
+  const userId = getSessionUserId();
+  return withoutExpired(read()).filter(entry => belongsTo(entry, userId)).length;
+}
+
+function belongsTo(entry: QueuedClaim, userId: string | null): boolean {
+  return !entry.userId || entry.userId === userId;
 }
 
 export function onClaimFlushed(listener: FlushListener): () => void {
@@ -94,8 +111,17 @@ export async function flushQueue(): Promise<FinishWalkResult[]> {
     return [];
   }
 
+  // Signed out, nothing can be submitted — every call would come back
+  // UNAUTHENTICATED and cost a round trip each. The queue is flushed again the
+  // moment a session appears.
+  const userId = getSessionUserId();
+  if (!userId) {
+    return [];
+  }
+
   const queue = withoutExpired(read());
-  if (queue.length === 0) {
+  const mine = queue.filter(entry => belongsTo(entry, userId));
+  if (mine.length === 0) {
     write(queue);
     return [];
   }
@@ -108,20 +134,27 @@ export async function flushQueue(): Promise<FinishWalkResult[]> {
 
   isFlushing = true;
   const resolved: FinishWalkResult[] = [];
-  const remaining: QueuedClaim[] = [];
+  // Another account's entries are carried over untouched.
+  const remaining: QueuedClaim[] = queue.filter(entry => !belongsTo(entry, userId));
 
   try {
-    for (const entry of queue) {
+    for (const entry of mine) {
       try {
         if (entry.samples.length > 0) {
-          await uploadPointsInBatches(entry.walkId, entry.samples);
+          await uploadInBatches(entry.walkId, entry.samples);
         }
 
         const result = await finishWalk(entry.walkId, entry.idempotencyKey);
         resolved.push(result);
 
         for (const listener of listeners) {
-          listener(entry.walkId, result);
+          try {
+            listener(entry.walkId, result);
+          } catch (error) {
+            // A listener is UI plumbing. It must never put a claim that the
+            // server has already accepted back into the queue.
+            logger.error('A claim-flushed listener threw', error);
+          }
         }
 
         logger.info('Flushed a queued claim', {status: result.status});
@@ -145,20 +178,6 @@ export async function flushQueue(): Promise<FinishWalkResult[]> {
   }
 
   return resolved;
-}
-
-/**
- * Uploads points in batches.
- *
- * A four-hour walk is thousands of rows; one insert that size is slow, likely
- * to time out on mobile data, and all-or-nothing. Batching means a dropped
- * connection costs one batch, and the upsert makes re-sending it free.
- */
-async function uploadPointsInBatches(walkId: string, samples: readonly GpsSample[]): Promise<void> {
-  const size = WALK_LIMITS.pointUploadBatchSize;
-  for (let start = 0; start < samples.length; start += size) {
-    await uploadPoints(walkId, samples.slice(start, start + size));
-  }
 }
 
 /**

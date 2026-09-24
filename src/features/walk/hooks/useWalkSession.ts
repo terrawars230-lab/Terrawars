@@ -6,6 +6,8 @@ import {queryKeys} from '@core/constants/queryKeys';
 import {createLogger} from '@core/logger/logger';
 import {cachedGameConfig, fetchGameConfig} from '@features/settings/api/gameConfigApi';
 
+import {abandonWalk} from '../api/walkApi';
+import {startNewWalk} from '../services/walkRecorder';
 import {adoptRestoredWalk, useWalkStore, type PersistedWalk} from '../store/walkStore';
 
 /**
@@ -36,25 +38,27 @@ export type SessionState =
 
 export interface UseWalkSession {
   state: SessionState;
-  /** Adopts the interrupted walk and continues recording it. */
-  resumeInterrupted: () => Promise<void>;
+  /** Adopts the interrupted walk, paused, so the user decides when to go on. */
+  resumeInterrupted: () => void;
   /** Discards the interrupted walk and starts a fresh one. */
   discardAndStartFresh: () => Promise<void>;
   /** Retries after a failed start. */
   retry: () => Promise<void>;
 }
 
-export function useWalkSession(start: () => Promise<void>): UseWalkSession {
+export function useWalkSession(): UseWalkSession {
   const [state, setState] = useState<SessionState>({status: 'checking'});
   const interrupted = useRef<PersistedWalk | null>(null);
 
-  // The live tunables. `cachedGameConfig()` gives the previous successful fetch
-  // (or the launch defaults) so a cold offline start still previews sensibly.
+  // `placeholderData`, not `initialData`: initial data counts as fresh, so the
+  // staleTime below would have kept the live tunables from being fetched at
+  // all for the first five minutes — every walk started in that window was
+  // previewed against the cache or the compiled-in defaults.
   const {data: config} = useQuery({
     queryKey: queryKeys.gameConfig,
     queryFn: fetchGameConfig,
     staleTime: 5 * 60_000,
-    initialData: cachedGameConfig,
+    placeholderData: cachedGameConfig,
   });
 
   const setConfig = useWalkStore(store => store.setConfig);
@@ -67,13 +71,13 @@ export function useWalkSession(start: () => Promise<void>): UseWalkSession {
   const beginFresh = useCallback(async () => {
     setState({status: 'starting'});
     try {
-      await start();
+      await startNewWalk();
       setState({status: 'recording'});
     } catch (error) {
       logger.error('Could not start the walk', error);
       setState({status: 'failed', error});
     }
-  }, [start]);
+  }, []);
 
   // Runs once on mount. Either there is an interrupted walk to offer, or we
   // start a new one immediately — the user already pressed "Start walk" and
@@ -85,10 +89,10 @@ export function useWalkSession(start: () => Promise<void>): UseWalkSession {
     }
     hasRun.current = true;
 
-    // Already recording (a remount from a rotation or a navigation) — do not
-    // start a second walk on top of the running one.
+    // Already live — the user left the walk screen and came back. Never start
+    // a second walk on top of the running one.
     const {phase} = useWalkStore.getState();
-    if (phase === 'recording' || phase === 'paused') {
+    if (phase === 'recording' || phase === 'paused' || phase === 'finishing') {
       setState({status: 'recording'});
       return;
     }
@@ -108,10 +112,10 @@ export function useWalkSession(start: () => Promise<void>): UseWalkSession {
     void beginFresh();
   }, [beginFresh]);
 
-  const resumeInterrupted = useCallback(async () => {
+  const resumeInterrupted = useCallback(() => {
     const restored = interrupted.current;
     if (!restored) {
-      await beginFresh();
+      void beginFresh();
       return;
     }
 
@@ -124,8 +128,19 @@ export function useWalkSession(start: () => Promise<void>): UseWalkSession {
   }, [beginFresh, config]);
 
   const discardAndStartFresh = useCallback(async () => {
-    useWalkStore.getState().reset();
+    const restored = interrupted.current;
     interrupted.current = null;
+    useWalkStore.getState().reset();
+
+    // Closed on the server too. Left active, it would hold the one-active-walk
+    // slot until the nightly job, and its points would sit under a walk that
+    // can never be finished.
+    if (restored) {
+      abandonWalk(restored.walkId).catch(() => {
+        logger.warn('Could not abandon the interrupted walk; the next start supersedes it');
+      });
+    }
+
     await beginFresh();
   }, [beginFresh]);
 

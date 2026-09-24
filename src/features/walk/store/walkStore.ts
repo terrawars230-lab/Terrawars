@@ -37,10 +37,18 @@ export interface PersistedWalk {
   startedAt: number;
   /** Accumulated paused milliseconds, excluded from duration (FR-16). */
   pausedMs: number;
+  /**
+   * When the current pause began, if the walk was paused when it was written.
+   * Optional because walks persisted by earlier builds do not carry it.
+   */
+  pausedAt?: number | null;
   samples: GpsSample[];
   /** Highest seq uploaded to the server; everything after it is pending. */
   uploadedThroughSeq: number;
 }
+
+/** FR-19: which hard cap ended the walk. */
+export type AutoEndReason = 'distance' | 'duration';
 
 interface WalkState {
   phase: WalkPhase;
@@ -49,6 +57,12 @@ interface WalkState {
   startedAt: number | null;
   pausedMs: number;
   pausedAt: number | null;
+  /**
+   * Set once when an FR-19 cap is crossed. The recorder stops listening at
+   * that moment; the walk screen sees this and finishes the walk, whenever it
+   * is next on screen.
+   */
+  autoEndReason: AutoEndReason | null;
 
   samples: GpsSample[];
   distanceM: number;
@@ -84,6 +98,14 @@ interface WalkState {
   addSample: (sample: Omit<GpsSample, 'seq'>) => void;
   pause: () => void;
   resume: () => void;
+  /** FR-19: records which cap ended the walk and stops it accepting samples. */
+  markAutoEnded: (reason: AutoEndReason) => void;
+  /**
+   * Moves a live walk into `finishing`. Returns false when there is no walk to
+   * finish or a finish is already under way — the guard that stops a double
+   * tap, or an auto-end racing a manual finish, from submitting twice.
+   */
+  beginFinishing: () => boolean;
   reset: () => void;
 
   setConfig: (config: GameConfig) => void;
@@ -142,6 +164,7 @@ export const useWalkStore = create<WalkState>((set, get) => ({
   startedAt: null,
   pausedMs: 0,
   pausedAt: null,
+  autoEndReason: null,
 
   samples: [],
   distanceM: 0,
@@ -161,6 +184,7 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       startedAt: Date.now(),
       pausedMs: 0,
       pausedAt: null,
+      autoEndReason: null,
       samples: [],
       distanceM: 0,
       uploadedThroughSeq: -1,
@@ -213,11 +237,16 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       return;
     }
     set({phase: 'paused', pausedAt: Date.now()});
+    // Persisted so a kill during the pause does not count the paused minutes
+    // as walked when the walk is restored (FR-15, FR-16).
+    persist(get);
   },
 
   resume: () => {
-    const {phase, pausedAt, pausedMs} = get();
-    if (phase !== 'paused') {
+    const {phase, pausedAt, pausedMs, autoEndReason} = get();
+    // A walk ended by an FR-19 cap stays ended; resuming it would record past
+    // the limit it was stopped at.
+    if (phase !== 'paused' || autoEndReason !== null) {
       return;
     }
     set({
@@ -226,6 +255,28 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       pausedAt: null,
     });
     persist(get);
+  },
+
+  markAutoEnded: reason => {
+    const {phase, autoEndReason} = get();
+    if (autoEndReason !== null || (phase !== 'recording' && phase !== 'paused')) {
+      return;
+    }
+    set({
+      autoEndReason: reason,
+      phase: 'paused',
+      pausedAt: phase === 'recording' ? Date.now() : get().pausedAt,
+    });
+    persist(get);
+  },
+
+  beginFinishing: () => {
+    const {phase, walkId} = get();
+    if (walkId === null || (phase !== 'recording' && phase !== 'paused')) {
+      return false;
+    }
+    set({phase: 'finishing'});
+    return true;
   },
 
   reset: () => {
@@ -237,6 +288,7 @@ export const useWalkStore = create<WalkState>((set, get) => ({
       startedAt: null,
       pausedMs: 0,
       pausedAt: null,
+      autoEndReason: null,
       samples: [],
       distanceM: 0,
       uploadedThroughSeq: -1,
@@ -398,13 +450,23 @@ export function adoptRestoredWalk(restored: PersistedWalk, config: GameConfig): 
 
   const preview = buildClaimPreview(restored.samples, config);
 
+  // FR-16: time nobody was recording is not walking time. That is the open
+  // pause if the walk was paused when the app died, and otherwise the gap
+  // since the last fix — the app was dead, not walking. Counting it would push
+  // a resumed walk towards the FR-19 cap for minutes it never recorded.
+  const now = Date.now();
+  const lastFixAt = restored.samples[restored.samples.length - 1]?.timestamp;
+  const idleSince = Math.min(now, restored.pausedAt ?? lastFixAt ?? restored.startedAt);
+  const pausedMs = restored.pausedMs + Math.max(0, now - idleSince);
+
   useWalkStore.setState({
     phase: 'paused',
     walkId: restored.walkId,
     clientWalkId: restored.clientWalkId,
     startedAt: restored.startedAt,
-    pausedMs: restored.pausedMs,
-    pausedAt: Date.now(),
+    pausedMs,
+    pausedAt: now,
+    autoEndReason: null,
     samples: restored.samples,
     distanceM: running.distanceM,
     distanceAnchor: running.distanceAnchor,
@@ -419,7 +481,7 @@ export function adoptRestoredWalk(restored: PersistedWalk, config: GameConfig): 
 }
 
 function persist(get: () => WalkState): void {
-  const {walkId, clientWalkId, startedAt, pausedMs, samples, uploadedThroughSeq} = get();
+  const {walkId, clientWalkId, startedAt, pausedMs, pausedAt, samples, uploadedThroughSeq} = get();
   if (!walkId || !clientWalkId || startedAt === null) {
     return;
   }
@@ -429,6 +491,7 @@ function persist(get: () => WalkState): void {
     clientWalkId,
     startedAt,
     pausedMs,
+    pausedAt,
     samples,
     uploadedThroughSeq,
   } satisfies PersistedWalk);

@@ -100,18 +100,20 @@ export interface Database {
           created_at: string;
           updated_at: string;
         };
+        // Exactly the columns the client is GRANTed (migration
+        // 20260922120000_walks_column_grants). Everything else on a walk —
+        // distance, duration, path, integrity signals — is written by
+        // finish_walk alone, so it is not offered here either.
         Insert: {
-          id?: string;
           user_id: string;
           client_walk_id?: string | null;
           started_at: string;
           device_meta?: Json;
-          integrity?: Json;
         };
         Update: {
+          /** RLS allows only 'active' → 'abandoned' (FR-17). */
           status?: WalkStatus;
           ended_at?: string | null;
-          integrity?: Json;
         };
         Relationships: [];
       };

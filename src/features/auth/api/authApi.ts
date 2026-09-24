@@ -2,6 +2,7 @@ import type {Session} from '@supabase/supabase-js';
 
 import {parseErrorEnvelope, toApiError} from '@core/api/errorMapping';
 import {supabase} from '@core/api/supabase/client';
+import {env} from '@core/config/env';
 import {createLogger} from '@core/logger/logger';
 
 /**
@@ -36,6 +37,11 @@ export async function signUpWithEmail({email, password}: Credentials): Promise<S
   const {data, error} = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
+    // Where the confirmation LINK lands once it has verified the address. The
+    // app itself confirms with the emailed code (verifySignUpOtp), so this only
+    // decides what a user who taps the link instead sees: a page telling them
+    // to return to the app, rather than the project's default Site URL.
+    options: env.authEmailRedirectUrl ? {emailRedirectTo: env.authEmailRedirectUrl} : undefined,
   });
 
   if (error) {
@@ -61,11 +67,37 @@ export async function resendConfirmationEmail(email: string): Promise<void> {
   const {error} = await supabase.auth.resend({
     type: 'signup',
     email: email.trim().toLowerCase(),
+    options: env.authEmailRedirectUrl ? {emailRedirectTo: env.authEmailRedirectUrl} : undefined,
   });
 
   if (error) {
     throw toApiError(error, 'Could not send that email again');
   }
+}
+
+/**
+ * FR-01: confirms a new account with the 6-digit code from the sign-up email.
+ *
+ * A code rather than the link, for the same reason as password recovery: the
+ * link opens a browser, verifies the address there and leaves the app still
+ * signed out, with nothing to tell the user what to do next. A code typed into
+ * the app confirms the address AND signs the user in, on this device, with no
+ * deep link to get wrong.
+ *
+ * `type: 'email'` covers sign-up confirmation for an unconfirmed address.
+ * Requires `{{ .Token }}` in the Supabase "Confirm signup" email template.
+ */
+export async function verifySignUpOtp(email: string, token: string): Promise<Session> {
+  const {data, error} = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: token.trim(),
+    type: 'email',
+  });
+
+  if (error || !data.session) {
+    throw toApiError(error, 'That code did not work');
+  }
+  return data.session;
 }
 
 export async function signInWithEmail({email, password}: Credentials): Promise<Session> {
@@ -225,9 +257,19 @@ export async function setUsername(username: string): Promise<string> {
  * map does not develop holes.
  */
 export async function requestAccountDeletion(): Promise<void> {
-  const {error} = await supabase.rpc('request_account_deletion');
+  const {data, error} = await supabase.rpc('request_account_deletion');
   if (error) {
     throw toApiError(error, 'Could not delete your account');
   }
+
+  // The function reports "not signed in" as an envelope on a 200, not as an
+  // error. Treating that as success would sign the user out believing their
+  // data was queued for deletion when nothing happened.
+  const rejection = parseErrorEnvelope(data);
+  if (rejection) {
+    throw rejection;
+  }
+
+  logger.info('Account deletion requested');
   await signOut();
 }

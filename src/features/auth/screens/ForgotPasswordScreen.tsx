@@ -12,6 +12,7 @@ import {useTheme} from '@core/theme/ThemeProvider';
 
 import {sendPasswordReset} from '../api/authApi';
 import {useAuthStore} from '../store/authStore';
+import {isValidEmail, normaliseEmail} from '../utils/validation';
 
 import {useAuthFormStyles} from './authFormStyles';
 
@@ -29,9 +30,9 @@ export function ForgotPasswordScreen(): React.JSX.Element {
 
   const handleSubmit = useCallback(async () => {
     setError(null);
-    const address = email.trim().toLowerCase();
+    const address = normaliseEmail(email);
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+    if (!isValidEmail(address)) {
       setError(t('auth.emailInvalid'));
       return;
     }
@@ -68,6 +69,7 @@ export function ForgotPasswordScreen(): React.JSX.Element {
             value={email}
             onChangeText={setEmail}
             autoCapitalize="none"
+            autoCorrect={false}
             autoComplete="email"
             keyboardType="email-address"
             textContentType="emailAddress"

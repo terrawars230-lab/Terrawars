@@ -60,9 +60,41 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * R8 on release builds: shrinks and obfuscates the bytecode and strips unused
+ * resources — a smaller download, and harder-to-read code shipped to every
+ * phone. Everything that is looked up by reflection is kept in
+ * proguard-rules.pro (react-native-config's BuildConfig in particular: without
+ * that rule a release build cannot read its own .env and crashes on launch).
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
+
+/**
+ * Release identity, read from the repo-root app.json so JS (the settings
+ * footer) and Android always agree. `buildNumber` must go up on every Play
+ * upload; see docs/RELEASE.md.
+ */
+def appJson = new groovy.json.JsonSlurper().parse(rootProject.file("../app.json"))
+def appVersionName = appJson.version ?: "1.0.0"
+def appVersionCode = (appJson.buildNumber ?: 1) as Integer
+
+/**
+ * Release signing — the UPLOAD key for Play App Signing.
+ *
+ * Read from android/keystore.properties (git-ignored) or, in CI, from the
+ * TERRAWARS_UPLOAD_* environment variables. Never committed, never the debug
+ * key: Play rejects a debug-signed bundle, and a release signed with the
+ * public debug key could be re-signed by anyone.
+ */
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.withInputStream { keystoreProperties.load(it) }
+}
+def releaseSigningValue = { String propertyName, String envName ->
+    keystoreProperties.getProperty(propertyName) ?: System.getenv(envName)
+}
+def releaseStoreFile = releaseSigningValue("storeFile", "TERRAWARS_UPLOAD_STORE_FILE")
+def hasReleaseSigning = releaseStoreFile != null && file(releaseStoreFile).exists()
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -87,8 +119,8 @@ android {
         applicationId "com.terrawars"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode appVersionCode
+        versionName appVersionName
 
         // Substituted into AndroidManifest.xml. The `?:` fallback keeps a
         // checkout without a .env buildable — the map just renders blank tiles,
@@ -104,18 +136,43 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasReleaseSigning) {
+            release {
+                storeFile file(releaseStoreFile)
+                storePassword releaseSigningValue("storePassword", "TERRAWARS_UPLOAD_STORE_PASSWORD")
+                keyAlias releaseSigningValue("keyAlias", "TERRAWARS_UPLOAD_KEY_ALIAS")
+                keyPassword releaseSigningValue("keyPassword", "TERRAWARS_UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // The upload key when configured. Without it a release APK is still
+            // signed with the debug key so it can be installed for local
+            // testing — but a Play bundle cannot be built that way; see the
+            // bundleRelease guard below.
+            signingConfig hasReleaseSigning ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
+            shrinkResources enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
+    }
+}
+
+// A bundle is only ever built to upload to Play, and Play rejects a
+// debug-signed one outright. Fail at the start of the build with the fix,
+// rather than minutes later in the Play Console.
+gradle.taskGraph.whenReady { graph ->
+    def buildsReleaseBundle = graph.allTasks.any { it.name == "bundleRelease" }
+    if (buildsReleaseBundle && !hasReleaseSigning) {
+        throw new GradleException(
+            "Release signing is not configured. Create android/keystore.properties " +
+            "(storeFile, storePassword, keyAlias, keyPassword) or set the " +
+            "TERRAWARS_UPLOAD_* environment variables — see docs/RELEASE.md."
+        )
     }
 }
 

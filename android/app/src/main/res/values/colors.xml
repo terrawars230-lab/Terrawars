@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Nocturne, mirrored from src/core/theme/tokens.ts. Needed natively for
+         the window background (shown before any JS runs), the launcher icon and
+         the walk notification's accent. -->
+    <color name="brand_background">#161826</color>
+    <color name="brand_surface">#232532</color>
+    <color name="brand_accent">#9184D9</color>
+    <color name="brand_accent_dark">#423A6A</color>
+    <color name="ic_launcher_background">#161826</color>
+</resources>

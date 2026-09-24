@@ -11,6 +11,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.android.gms.tasks.CancellationTokenSource
@@ -43,7 +44,11 @@ class WalkTrackerModule(
   }
 
   override fun invalidate() {
-    WalkTrackingService.listener = null
+    // Only clear the hand-off if it is still ours: after a dev reload the new
+    // module instance may already have registered itself.
+    if (WalkTrackingService.listener === this) {
+      WalkTrackingService.listener = null
+    }
     super.invalidate()
   }
 
@@ -51,6 +56,16 @@ class WalkTrackerModule(
 
   @ReactMethod
   fun start(options: ReadableMap, promise: Promise) {
+    // Checked here, before the service exists. On Android 14+ a location
+    // foreground service started without the permission throws inside
+    // startForeground, and a service launched with startForegroundService that
+    // never reaches startForeground takes the whole app down seconds later.
+    // Rejecting is recoverable; that crash is not.
+    if (!WalkTrackingService.hasLocationPermission(reactContext)) {
+      promise.reject("E_PERMISSION", "Location permission not granted")
+      return
+    }
+
     try {
       val intent = Intent(reactContext, WalkTrackingService::class.java).apply {
         action = WalkTrackingService.ACTION_START
@@ -70,16 +85,17 @@ class WalkTrackerModule(
           WalkTrackingService.EXTRA_NOTIFICATION_BODY,
           options.getString("notificationBody"),
         )
+        if (options.hasKey("elapsedMs") && !options.isNull("elapsedMs")) {
+          putExtra(WalkTrackingService.EXTRA_ELAPSED_MS, options.getDouble("elapsedMs").toLong())
+        }
       }
 
-      // From Android 8 a background start must use startForegroundService, and
-      // the service then has five seconds to call startForeground or the system
-      // kills it with a ForegroundServiceDidNotStartInTimeException.
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        reactContext.startForegroundService(intent)
-      } else {
-        reactContext.startService(intent)
-      }
+      // From Android 8 a foreground service must be started with
+      // startForegroundService, and then has seconds to call startForeground.
+      // On Android 12+ this call itself throws when the app is not in the
+      // foreground (ForegroundServiceStartNotAllowedException) — caught below
+      // and reported rather than crashing.
+      reactContext.startForegroundService(intent)
 
       promise.resolve(null)
     } catch (error: Exception) {
@@ -109,11 +125,26 @@ class WalkTrackerModule(
   /** One-shot fix for centring the map before a walk starts (FR-53). */
   @ReactMethod
   fun getCurrentPosition(timeoutMs: Double, promise: Promise) {
+    if (!WalkTrackingService.hasLocationPermission(reactContext)) {
+      promise.reject("E_PERMISSION", "Location permission not granted")
+      return
+    }
+
     try {
       val client = LocationServices.getFusedLocationProviderClient(reactContext)
       val cancellation = CancellationTokenSource()
 
-      client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
+      // The timeout the caller asked for is honoured: without a duration the
+      // request can sit waiting on a cold GPS indoors, and the "centre on me"
+      // spinner never stops. A fix up to 30 s old is accepted, which answers
+      // instantly when the phone already knows where it is.
+      val request = CurrentLocationRequest.Builder()
+        .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+        .setDurationMillis(timeoutMs.toLong().coerceIn(1_000L, 60_000L))
+        .setMaxUpdateAgeMillis(30_000L)
+        .build()
+
+      client.getCurrentLocation(request, cancellation.token)
         .addOnSuccessListener { location ->
           if (location == null) {
             promise.reject("E_NO_FIX", "No location fix available")
@@ -123,6 +154,9 @@ class WalkTrackerModule(
         }
         .addOnFailureListener { error ->
           promise.reject("E_LOCATION_FAILED", error.message, error)
+        }
+        .addOnCanceledListener {
+          promise.reject("E_NO_FIX", "Location request was cancelled")
         }
     } catch (error: SecurityException) {
       promise.reject("E_PERMISSION", "Location permission not granted", error)
@@ -188,9 +222,15 @@ class WalkTrackerModule(
   private fun emit(event: String, payload: WritableMap) {
     if (!reactContext.hasActiveReactInstance()) return
 
-    reactContext
-      .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-      .emit(event, payload)
+    try {
+      reactContext
+        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+        .emit(event, payload)
+    } catch (error: Exception) {
+      // The JS runtime can be torn down between the check above and this call
+      // (a reload, the app closing). Dropping one event beats crashing the
+      // service that is recording the walk.
+    }
   }
 
   private fun sendAction(action: String, promise: Promise) {

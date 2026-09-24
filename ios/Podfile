@@ -1,12 +1,31 @@
-# Resolve react_native_pods.rb with node to allow for hoisting
-require Pod::Executable.execute_command('node', ['-p',
-  'require.resolve(
-    "react-native/scripts/react_native_pods.rb",
-    {paths: [process.argv[1]]},
-  )', __dir__]).strip
+def node_require(script)
+  # Resolve script with node to allow for hoisting
+  require Pod::Executable.execute_command('node', ['-p',
+    "require.resolve(
+      '#{script}',
+      {paths: [process.argv[1]]},
+    )", __dir__]).strip
+end
+
+node_require('react-native/scripts/react_native_pods.rb')
+node_require('react-native-permissions/scripts/setup.rb')
 
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
+
+# react-native-permissions v5 compiles in ONLY the handlers listed here. Without
+# this call every request() rejects with "No permission handler detected", so
+# the location rationale's "Allow" button did nothing on iOS and a walk could
+# never start. Keep this list in step with src/services/permissions and the
+# purpose strings in Info.plist:
+#   LocationWhenInUse — the walk (FR-10); never "Always" (ADR D-04).
+#   LocationAccuracy  — temporary full accuracy when Precise Location is off.
+# Motion and Notifications are deliberately absent until the features that use
+# them exist (doc 06 §2 step counter, FR-70 raid pushes).
+setup_permissions([
+  'LocationWhenInUse',
+  'LocationAccuracy',
+])
 
 linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil

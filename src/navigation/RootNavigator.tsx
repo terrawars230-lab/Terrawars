@@ -7,8 +7,12 @@ import {useTranslation} from 'react-i18next';
 
 import {ErrorBoundary, Icon, Loader} from '@components/index';
 import {queryKeys} from '@core/constants/queryKeys';
+import {storage} from '@core/storage/storage';
+import {StorageKeys} from '@core/storage/storageKeys';
 import {useTheme} from '@core/theme/ThemeProvider';
 import {ChooseUsernameScreen} from '@features/auth/screens/ChooseUsernameScreen';
+import {ConfirmEmailScreen} from '@features/auth/screens/ConfirmEmailScreen';
+import {DeletionPendingScreen} from '@features/auth/screens/DeletionPendingScreen';
 import {ForgotPasswordScreen} from '@features/auth/screens/ForgotPasswordScreen';
 import {ResetPasswordScreen} from '@features/auth/screens/ResetPasswordScreen';
 import {SignInScreen} from '@features/auth/screens/SignInScreen';
@@ -25,7 +29,9 @@ import {ProfileScreen} from '@features/profile/screens/ProfileScreen';
 import {PublicProfileScreen} from '@features/profile/screens/PublicProfileScreen';
 import {SettingsScreen} from '@features/settings/screens/SettingsScreen';
 import {ActiveWalkScreen} from '@features/walk/screens/ActiveWalkScreen';
+import {BatteryGuidanceScreen} from '@features/walk/screens/BatteryGuidanceScreen';
 import {ClaimResultScreen} from '@features/walk/screens/ClaimResultScreen';
+import {SafetyNoticeScreen} from '@features/walk/screens/SafetyNoticeScreen';
 
 import type {MainTabParamList, RootStackParamList} from './types';
 
@@ -49,6 +55,32 @@ const LeaderboardTabIcon = ({color}: TabIconProps) => (
 const ProfileTabIcon = ({color}: TabIconProps) => (
   <Icon name="user" color={color} size={TAB_ICON_SIZE} />
 );
+
+/**
+ * The walk screen is its own error boundary. A crash in the map renderer during
+ * an active walk must not take the recorder down with it — the walk lives in a
+ * store and on disk (FR-15), and the recorder runs outside React entirely, so
+ * remounting this subtree is recoverable rather than a lost walk.
+ *
+ * Declared at module scope: an inline render function would be a new
+ * component type on every render of the navigator and remount the screen.
+ */
+function ActiveWalkRoute(): React.JSX.Element {
+  return (
+    <ErrorBoundary scope="walk">
+      <ActiveWalkScreen />
+    </ErrorBoundary>
+  );
+}
+
+/** Its own boundary for the same reason: the map is the most likely renderer to throw. */
+function MapRoute(): React.JSX.Element {
+  return (
+    <ErrorBoundary scope="map">
+      <MapScreen />
+    </ErrorBoundary>
+  );
+}
 
 /**
  * The navigation tree.
@@ -106,11 +138,19 @@ export function RootNavigator(): React.JSX.Element {
 }
 
 function AuthStack(): React.JSX.Element {
+  // Onboarding explains the game once. A player who has seen it — who signed
+  // out, or whose session expired — goes straight to signing in rather than
+  // being walked through three screens they already know.
+  const hasSeenOnboarding = storage.getBoolean(StorageKeys.onboardingCompleted);
+
   return (
-    <RootStack.Navigator screenOptions={stackScreenOptions}>
+    <RootStack.Navigator
+      screenOptions={stackScreenOptions}
+      initialRouteName={hasSeenOnboarding ? 'SignIn' : 'Onboarding'}>
       <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
       <RootStack.Screen name="SignUp" component={SignUpScreen} />
       <RootStack.Screen name="SignIn" component={SignInScreen} />
+      <RootStack.Screen name="ConfirmEmail" component={ConfirmEmailScreen} />
       <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <RootStack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
     </RootStack.Navigator>
@@ -124,6 +164,10 @@ function AuthenticatedStack(): React.JSX.Element {
   // FR-02: the username gate. `needs_username` is computed server-side in
   // get_me() rather than inferred from a local flag, so a user who signed up on
   // another device is still prompted exactly once.
+  //
+  // A failed or offline fetch falls through to the tabs deliberately: NFR-08
+  // requires a walk to be recordable with no connection at all, and blocking
+  // the whole app on this request would make that impossible.
   const {data: profile, isLoading} = useQuery({
     queryKey: queryKeys.profile.me(),
     queryFn: fetchMyProfile,
@@ -134,6 +178,10 @@ function AuthenticatedStack(): React.JSX.Element {
     return <Loader />;
   }
 
+  if (profile?.deletionRequested) {
+    return <DeletionPendingScreen />;
+  }
+
   if (profile?.needsUsername) {
     return (
       <RootStack.Navigator screenOptions={stackScreenOptions}>
@@ -142,6 +190,13 @@ function AuthenticatedStack(): React.JSX.Element {
     );
   }
 
+  const headerOptions = {
+    headerShown: true,
+    headerStyle: {backgroundColor: theme.colors.background},
+    headerTintColor: theme.colors.textPrimary,
+    headerShadowVisible: false,
+  } as const;
+
   return (
     <RootStack.Navigator
       screenOptions={{
@@ -149,20 +204,7 @@ function AuthenticatedStack(): React.JSX.Element {
         contentStyle: {backgroundColor: theme.colors.background},
       }}>
       <RootStack.Screen name="MainTabs" component={MainTabs} />
-
-      {/*
-        The walk screen is its own boundary. A crash in the map renderer during
-        an active walk must not take the recorder down with it — the walk lives
-        in a store and on disk (FR-15), so remounting this subtree is
-        recoverable rather than a lost walk.
-      */}
-      <RootStack.Screen name="ActiveWalk">
-        {() => (
-          <ErrorBoundary scope="walk">
-            <ActiveWalkScreen />
-          </ErrorBoundary>
-        )}
-      </RootStack.Screen>
+      <RootStack.Screen name="ActiveWalk" component={ActiveWalkRoute} />
 
       <RootStack.Screen
         name="ClaimResult"
@@ -178,24 +220,34 @@ function AuthenticatedStack(): React.JSX.Element {
         options={{presentation: 'modal', animation: 'slide_from_bottom'}}
       />
       <RootStack.Screen
+        name="SafetyNotice"
+        component={SafetyNoticeScreen}
+        options={{presentation: 'modal', animation: 'slide_from_bottom'}}
+      />
+      <RootStack.Screen
+        name="BatteryGuidance"
+        component={BatteryGuidanceScreen}
+        options={{...headerOptions, title: ''}}
+      />
+      <RootStack.Screen
         name="ParcelDetail"
         component={ParcelDetailScreen}
         options={{
+          ...headerOptions,
           presentation: 'modal',
           animation: 'slide_from_bottom',
-          headerShown: true,
           title: t('parcel.area'),
         }}
       />
       <RootStack.Screen
         name="PublicProfile"
         component={PublicProfileScreen}
-        options={{headerShown: true, title: ''}}
+        options={{...headerOptions, title: ''}}
       />
       <RootStack.Screen
         name="Settings"
         component={SettingsScreen}
-        options={{headerShown: true, title: t('settings.title')}}
+        options={{...headerOptions, title: t('settings.title')}}
       />
     </RootStack.Navigator>
   );
@@ -228,17 +280,11 @@ function MainTabs(): React.JSX.Element {
       }}>
       <Tabs.Screen
         name="MapTab"
+        component={MapRoute}
         options={{
           title: t('map.title'),
           tabBarIcon: MapTabIcon,
         }}
-        // Its own boundary for the same reason as the walk screen: the map is
-        // the most complex renderer in the app and the most likely to throw.
-        children={() => (
-          <ErrorBoundary scope="map">
-            <MapScreen />
-          </ErrorBoundary>
-        )}
       />
       <Tabs.Screen
         name="LeaderboardTab"

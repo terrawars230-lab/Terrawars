@@ -29,6 +29,11 @@ export const queryKeys = {
     detail: (walkId: string) => [...queryKeys.walks.all, 'detail', walkId] as const,
   },
 
+  claims: {
+    all: ['claims'] as const,
+    detail: (claimId: string) => [...queryKeys.claims.all, 'detail', claimId] as const,
+  },
+
   parcels: {
     all: ['parcels'] as const,
     inBounds: (bounds: MapBounds, zoom: number) =>

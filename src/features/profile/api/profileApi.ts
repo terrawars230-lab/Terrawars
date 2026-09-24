@@ -1,4 +1,4 @@
-import {toApiError} from '@core/api/errorMapping';
+import {parseErrorEnvelope, toApiError} from '@core/api/errorMapping';
 import {supabase} from '@core/api/supabase/client';
 
 /**
@@ -32,6 +32,12 @@ export interface MyProfile {
   homeCity: string | null;
   /** FR-02: true until the user has chosen a real username. */
   needsUsername: boolean;
+  /**
+   * FR-06: the account is inside its 7-day deletion grace period. The app
+   * signs such a session out rather than letting it play on into a hard
+   * delete. Absent (false) until the server migration that reports it runs.
+   */
+  deletionRequested: boolean;
   stats: UserStats;
 }
 
@@ -41,7 +47,14 @@ export async function fetchMyProfile(): Promise<MyProfile> {
     throw toApiError(error, 'Could not load your profile');
   }
 
-  const payload = (data ?? {}) as Record<string, unknown>;
+  // get_me selects the caller's own row; a null means the session has no
+  // profile behind it (deleted and purged). An empty profile would send that
+  // user to the username gate for an account that no longer exists.
+  if (!data) {
+    throw toApiError(new Error('No profile for this session'), 'Could not load your profile');
+  }
+
+  const payload = data as Record<string, unknown>;
   return {
     id: String(payload.id ?? ''),
     username: String(payload.username ?? ''),
@@ -50,6 +63,7 @@ export async function fetchMyProfile(): Promise<MyProfile> {
     colorHex: String(payload.color_hex ?? '#3B82F6'),
     homeCity: payload.home_city ? String(payload.home_city) : null,
     needsUsername: Boolean(payload.needs_username),
+    deletionRequested: Boolean(payload.deletion_requested),
     stats: parseStats(payload.stats),
   };
 }
@@ -90,9 +104,12 @@ export async function updateMyColor(colorHex: string): Promise<void> {
     throw toApiError(error, 'Could not change your colour');
   }
 
-  const envelope = (data as {error?: {code?: string; message?: string}})?.error;
-  if (envelope?.code) {
-    throw toApiError(new Error(envelope.message ?? envelope.code));
+  // COLOR_CHANGE_COOLDOWN and friends arrive as a doc 05 §7 envelope on a 200.
+  // Parsed rather than wrapped in a plain Error, so the code survives and the
+  // user sees "once every 30 days" instead of "something went wrong".
+  const rejection = parseErrorEnvelope(data);
+  if (rejection) {
+    throw rejection;
   }
 }
 
@@ -106,7 +123,9 @@ export interface StealEvent {
 
 /** FR-44: raid history, in both directions. */
 export async function fetchStealEvents(direction: 'incoming' | 'outgoing'): Promise<StealEvent[]> {
-  const userId = (await supabase.auth.getUser()).data.user?.id;
+  // The local session: getUser() is a network round trip, and RLS scopes the
+  // rows to the caller server-side regardless.
+  const userId = (await supabase.auth.getSession()).data.session?.user.id;
   if (!userId) {
     return [];
   }

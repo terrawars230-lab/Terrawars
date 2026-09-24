@@ -1,6 +1,6 @@
 {
   "name": "TerraWars",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "android": "react-native run-android --active-arch-only",
@@ -16,7 +16,9 @@
     "verify": "npm run typecheck && npm run lint && npm test",
     "test:sql": "bash supabase/tests/run.sh",
     "start:reset": "react-native start --reset-cache",
-    "bundle:check": "react-native bundle --platform android --dev true --entry-file index.js --bundle-output /dev/null --max-workers 2"
+    "bundle:check": "react-native bundle --platform android --dev true --entry-file index.js --bundle-output /dev/null --max-workers 2",
+    "release:check": "node scripts/check-release-env.mjs",
+    "icons": "python scripts/generate-icons.py"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

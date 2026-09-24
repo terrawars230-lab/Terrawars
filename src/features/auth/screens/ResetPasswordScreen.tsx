@@ -11,10 +11,9 @@ import {useTheme} from '@core/theme/ThemeProvider';
 
 import {updatePassword} from '../api/authApi';
 import {useAuthStore} from '../store/authStore';
+import {MIN_PASSWORD_LENGTH} from '../utils/validation';
 
 import {useAuthFormStyles} from './authFormStyles';
-
-const MIN_PASSWORD_LENGTH = 8;
 
 /**
  * Step 3 of 3: set the new password.
@@ -40,7 +39,7 @@ export function ResetPasswordScreen(): React.JSX.Element {
     setError(null);
 
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(t('auth.passwordTooShort'));
+      setError(t('auth.passwordTooShort', {length: MIN_PASSWORD_LENGTH}));
       return;
     }
     if (password !== repeat) {
@@ -64,7 +63,9 @@ export function ResetPasswordScreen(): React.JSX.Element {
   return (
     <Screen scrollable>
       <View style={styles.container}>
-        <Text variant="display">{t('passwordReset.newTitle')}</Text>
+        <Text variant="display" accessibilityRole="header">
+          {t('passwordReset.newTitle')}
+        </Text>
         <Text variant="body" color="textSecondary">
           {t('passwordReset.newSubtitle')}
         </Text>

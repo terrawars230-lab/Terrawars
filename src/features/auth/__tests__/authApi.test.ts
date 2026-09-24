@@ -1,9 +1,11 @@
 import {ApiError} from '@core/api/ApiError';
 import {
+  requestAccountDeletion,
   resendConfirmationEmail,
   setUsername,
   signUpWithEmail,
   verifyPasswordResetOtp,
+  verifySignUpOtp,
 } from '@features/auth/api/authApi';
 
 /**
@@ -25,6 +27,7 @@ jest.mock('@core/api/supabase/client', () => ({
       signUp: jest.fn(),
       resend: jest.fn(),
       verifyOtp: jest.fn(),
+      signOut: jest.fn(),
     },
     rpc: jest.fn(),
   },
@@ -32,7 +35,7 @@ jest.mock('@core/api/supabase/client', () => ({
 
 const {supabase} = jest.requireMock('@core/api/supabase/client') as {
   supabase: {
-    auth: {signUp: jest.Mock; resend: jest.Mock; verifyOtp: jest.Mock};
+    auth: {signUp: jest.Mock; resend: jest.Mock; verifyOtp: jest.Mock; signOut: jest.Mock};
     rpc: jest.Mock;
   };
 };
@@ -147,5 +150,53 @@ describe('setUsername', () => {
     });
 
     await expect(setUsername('pathfinder')).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('verifySignUpOtp', () => {
+  it('confirms the account with the emailed code and returns the session', async () => {
+    const session = {user: {id: 'u1'}};
+    supabase.auth.verifyOtp.mockResolvedValue({data: {session}, error: null});
+
+    await expect(verifySignUpOtp(' Walker@Example.com ', ' 654321 ')).resolves.toBe(session);
+    // 'email' covers sign-up confirmation of an unconfirmed address.
+    expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
+      email: 'walker@example.com',
+      token: '654321',
+      type: 'email',
+    });
+  });
+
+  it('rejects a code that verifies without producing a session', async () => {
+    supabase.auth.verifyOtp.mockResolvedValue({data: {session: null}, error: null});
+
+    await expect(verifySignUpOtp('walker@example.com', '654321')).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe('requestAccountDeletion', () => {
+  it('signs out once the deletion is recorded', async () => {
+    supabase.rpc.mockResolvedValue({
+      data: {status: 'deletion_requested', grace_period_days: 7},
+      error: null,
+    });
+    supabase.auth.signOut.mockResolvedValue({error: null});
+
+    await requestAccountDeletion();
+
+    expect(supabase.rpc).toHaveBeenCalledWith('request_account_deletion');
+    expect(supabase.auth.signOut).toHaveBeenCalled();
+  });
+
+  it('does not report success, or sign out, when the server refused', async () => {
+    // FR-06: a user told "deleted" whose data was never queued for deletion is
+    // the worst outcome this button can have.
+    supabase.rpc.mockResolvedValue({
+      data: {error: {code: 'UNAUTHENTICATED', message: 'Sign in required'}},
+      error: null,
+    });
+
+    await expect(requestAccountDeletion()).rejects.toMatchObject({code: 'UNAUTHENTICATED'});
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 });

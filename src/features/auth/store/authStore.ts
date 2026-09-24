@@ -3,7 +3,7 @@ import {create} from 'zustand';
 
 import {supabase} from '@core/api/supabase/client';
 import {createLogger} from '@core/logger/logger';
-import {storage} from '@core/storage/storage';
+import {runSignedOutCleanups, setSessionUserId} from '@core/session/session';
 
 import * as authApi from '../api/authApi';
 
@@ -45,6 +45,12 @@ interface AuthState {
   setRecoveringPassword: (value: boolean) => void;
 }
 
+function applySession(session: Session | null): Pick<AuthState, 'session' | 'userId' | 'status'> {
+  const userId = session?.user.id ?? null;
+  setSessionUserId(userId);
+  return {session, userId, status: session ? 'signedIn' : 'signedOut'};
+}
+
 export const useAuthStore = create<AuthState>(set => ({
   status: 'initialising',
   session: null,
@@ -59,18 +65,17 @@ export const useAuthStore = create<AuthState>(set => ({
     const {data} = supabase.auth.onAuthStateChange((event, session) => {
       logger.debug('Auth state changed', {event, hasSession: Boolean(session)});
 
-      set({
-        session,
-        userId: session?.user.id ?? null,
-        status: session ? 'signedIn' : 'signedOut',
-      });
+      set(applySession(session));
 
       if (event === 'SIGNED_OUT') {
         set({isRecoveringPassword: false});
-        // Wipe cached game state so the next user on this device never sees the
-        // previous one's walk. The Supabase session lives in AsyncStorage and
-        // is cleared by signOut() itself, so this cannot log anyone out.
-        storage.clearAll();
+        // Reached by an explicit sign-out, an account deletion AND a refresh
+        // token the server has stopped accepting — every way a session ends.
+        // Deferred out of the callback: auth events are delivered in order and
+        // awaited, and the cleanups stop native tracking and clear caches.
+        setTimeout(() => {
+          void runSignedOutCleanups();
+        }, 0);
       }
     });
 
@@ -79,39 +84,24 @@ export const useAuthStore = create<AuthState>(set => ({
 
   signIn: async credentials => {
     const session = await authApi.signInWithEmail(credentials);
-    set({session, userId: session.user.id, status: 'signedIn'});
+    set(applySession(session));
   },
 
   signUp: async credentials => {
     const result = await authApi.signUpWithEmail(credentials);
     if (result.session) {
-      set({
-        session: result.session,
-        userId: result.session.user.id,
-        status: 'signedIn',
-      });
+      set(applySession(result.session));
     }
     // No session means email confirmation is required. The result carries that
-    // back so the screen can say so; the listener picks the session up on its
-    // own once the user follows the link.
+    // back so the screen can say so; the listener picks the session up once
+    // the emailed code is verified.
     return result;
   },
 
   signOut: async () => {
     await authApi.signOut();
-    set({session: null, userId: null, status: 'signedOut', isRecoveringPassword: false});
+    set({...applySession(null), isRecoveringPassword: false});
   },
 
   setRecoveringPassword: value => set({isRecoveringPassword: value}),
 }));
-
-/**
- * Reads the current user id outside React.
- *
- * Needed by the walk recorder, which runs on a native event stream rather than
- * in a component tree. Returns `null` when signed out; callers must handle it
- * rather than assuming a session.
- */
-export function currentUserId(): string | null {
-  return useAuthStore.getState().userId;
-}

@@ -81,6 +81,22 @@ describe('redactContext', () => {
   it('leaves an empty context empty', () => {
     expect(redactContext({})).toEqual({});
   });
+
+  it('redacts coordinates inside an array held under an innocent key', () => {
+    // `samples` is not a location key, but its members are GPS fixes.
+    const redacted = redactContext({
+      samples: [
+        {seq: 0, lat: 31.5204, lng: 74.3587},
+        {seq: 1, latitude: 31.5205, longitude: 74.3588},
+      ],
+      tags: ['walk', 'retry'],
+    });
+
+    expect(JSON.stringify(redacted)).not.toContain('31.520');
+    expect(JSON.stringify(redacted)).not.toContain('74.358');
+    expect((redacted.samples as {seq: number}[])[1]!.seq).toBe(1);
+    expect(redacted.tags).toEqual(['walk', 'retry']);
+  });
 });
 
 describe('createLogger', () => {
@@ -132,7 +148,7 @@ describe('createLogger', () => {
     expect(JSON.stringify(context)).not.toContain('31.5204');
   });
 
-  it('serialises an Error rather than logging an empty object', () => {
+  it('reports an error exactly once, as an exception with its context', () => {
     const reporter: CrashReporter = {
       captureMessage: jest.fn(),
       captureException: jest.fn(),
@@ -140,14 +156,32 @@ describe('createLogger', () => {
     setCrashReporter(reporter);
 
     const failure = new Error('boom');
-    createLogger('walk').error('it broke', failure);
+    createLogger('walk').error('it broke', failure, {walkId: 'abc'});
 
-    const context = (reporter.captureMessage as jest.Mock).mock.calls[0]![2] as Record<
-      string,
-      unknown
-    >;
-    expect(context.error).toEqual(expect.objectContaining({name: 'Error', message: 'boom'}));
-    expect(reporter.captureException).toHaveBeenCalledWith(failure, expect.anything());
+    // A message AND an exception for the same failure would count every error
+    // twice in the crash-free-rate the release gate is measured on.
+    expect(reporter.captureMessage).not.toHaveBeenCalled();
+    expect(reporter.captureException).toHaveBeenCalledTimes(1);
+    expect(reporter.captureException).toHaveBeenCalledWith(
+      failure,
+      expect.objectContaining({scope: 'walk', message: 'it broke', walkId: 'abc'}),
+    );
+  });
+
+  it('redacts location from the context attached to an exception', () => {
+    const reporter: CrashReporter = {
+      captureMessage: jest.fn(),
+      captureException: jest.fn(),
+    };
+    setCrashReporter(reporter);
+
+    createLogger('walk').error('upload failed', new Error('x'), {
+      samples: [{lat: 31.5204, lng: 74.3587, seq: 1}],
+    });
+
+    const context = (reporter.captureException as jest.Mock).mock.calls[0]![1];
+    expect(JSON.stringify(context)).not.toContain('31.5204');
+    expect(JSON.stringify(context)).toContain('"seq":1');
   });
 
   it('works with no crash reporter attached', () => {

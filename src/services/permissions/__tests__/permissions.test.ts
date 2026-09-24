@@ -1,16 +1,33 @@
-import {RESULTS, check, request} from 'react-native-permissions';
+import {Platform} from 'react-native';
+
+import {
+  PERMISSIONS,
+  RESULTS,
+  check,
+  checkLocationAccuracy,
+  request,
+  requestLocationAccuracy,
+  requestMultiple,
+  requestNotifications,
+} from 'react-native-permissions';
 
 import {storage} from '@core/storage/storage';
 import {StorageKeys} from '@core/storage/storageKeys';
 
-import {requestMotionPermissionOnce} from '../permissions';
+import {
+  checkLocationPermission,
+  requestLocationPermission,
+  requestWalkNotificationsOnce,
+} from '../permissions';
 
 /**
- * The ask-once rule for motion.
+ * The location grant, as the walk actually needs it.
  *
- * Worth a test because the failure is invisible in code review and loud in
- * use: the walk flow runs before every walk, so a permission asked "once per
- * call site" is a system dialog every single time the user goes out.
+ * A grant is not enough on its own: Android 12+ and iOS 14+ both let the user
+ * hand over an approximate location instead, and a fix kilometres wide cannot
+ * trace a walk. These tests pin that "approximate" is reported as its own
+ * state rather than silently counted as a grant — the bug that would put a
+ * user on a walk that can never close a loop.
  */
 
 jest.mock('react-native-permissions', () => {
@@ -19,50 +36,135 @@ jest.mock('react-native-permissions', () => {
     ...actual,
     check: jest.fn(),
     request: jest.fn(),
+    requestMultiple: jest.fn(),
+    checkLocationAccuracy: jest.fn(),
+    requestLocationAccuracy: jest.fn(),
+    requestNotifications: jest.fn(),
   };
 });
 
-const mockCheck = check as jest.MockedFunction<typeof check>;
-const mockRequest = request as jest.MockedFunction<typeof request>;
+const mockCheck = check as jest.Mock;
+const mockRequest = request as jest.Mock;
+const mockRequestMultiple = requestMultiple as jest.Mock;
+const mockCheckAccuracy = checkLocationAccuracy as jest.Mock;
+const mockRequestAccuracy = requestLocationAccuracy as jest.Mock;
+const mockRequestNotifications = requestNotifications as jest.Mock;
 
-describe('requestMotionPermissionOnce', () => {
-  beforeEach(() => {
-    storage.remove(StorageKeys.motionPermissionAsked);
-    mockCheck.mockReset();
-    mockRequest.mockReset();
+const FINE = PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
+const COARSE = PERMISSIONS.ANDROID.ACCESS_COARSE_LOCATION;
+
+const originalOS = Platform.OS;
+const versionDescriptor = Object.getOwnPropertyDescriptor(Platform, 'Version');
+
+function onAndroid(apiLevel = 34): void {
+  Object.defineProperty(Platform, 'OS', {value: 'android', configurable: true, writable: true});
+  Object.defineProperty(Platform, 'Version', {get: () => apiLevel, configurable: true});
+}
+
+beforeEach(() => {
+  jest.resetAllMocks();
+  mockCheckAccuracy.mockResolvedValue('full');
+  mockRequestAccuracy.mockResolvedValue('full');
+  mockRequestNotifications.mockResolvedValue({status: RESULTS.GRANTED, settings: {}});
+});
+
+afterEach(() => {
+  Object.defineProperty(Platform, 'OS', {value: originalOS, configurable: true, writable: true});
+  if (versionDescriptor) {
+    Object.defineProperty(Platform, 'Version', versionDescriptor);
+  }
+});
+
+describe('Android location', () => {
+  beforeEach(() => onAndroid());
+
+  it('asks for fine and coarse together, as Android 12+ requires', async () => {
+    mockRequestMultiple.mockResolvedValue({[FINE]: RESULTS.GRANTED, [COARSE]: RESULTS.GRANTED});
+
+    await expect(requestLocationPermission()).resolves.toBe('granted');
+    expect(mockRequestMultiple).toHaveBeenCalledWith([FINE, COARSE]);
   });
 
-  it('asks the system the first time', async () => {
+  it('reports "approximate" when only coarse was granted', async () => {
+    mockRequestMultiple.mockResolvedValue({[FINE]: RESULTS.DENIED, [COARSE]: RESULTS.GRANTED});
+
+    await expect(requestLocationPermission()).resolves.toBe('approximate');
+  });
+
+  it('reports a permanent refusal as blocked', async () => {
+    mockRequestMultiple.mockResolvedValue({[FINE]: RESULTS.BLOCKED, [COARSE]: RESULTS.BLOCKED});
+
+    await expect(requestLocationPermission()).resolves.toBe('blocked');
+  });
+
+  it('reads an existing approximate grant without prompting', async () => {
+    mockCheck.mockImplementation(async (permission: string) =>
+      permission === FINE ? RESULTS.DENIED : RESULTS.GRANTED,
+    );
+
+    await expect(checkLocationPermission()).resolves.toBe('approximate');
+    expect(mockRequestMultiple).not.toHaveBeenCalled();
+  });
+});
+
+describe('iOS location', () => {
+  it('asks for temporary full accuracy when Precise Location is off', async () => {
     mockRequest.mockResolvedValue(RESULTS.GRANTED);
+    mockCheckAccuracy.mockResolvedValue('reduced');
+    mockRequestAccuracy.mockResolvedValue('full');
 
-    await expect(requestMotionPermissionOnce()).resolves.toBe('granted');
-    expect(mockRequest).toHaveBeenCalledTimes(1);
+    await expect(requestLocationPermission()).resolves.toBe('granted');
+    expect(mockRequestAccuracy).toHaveBeenCalledWith({purposeKey: 'WalkTracking'});
   });
 
-  it('never asks again, even after a denial', async () => {
-    mockRequest.mockResolvedValue(RESULTS.DENIED);
-    await requestMotionPermissionOnce();
+  it('reports "approximate" when full accuracy is refused', async () => {
+    mockRequest.mockResolvedValue(RESULTS.GRANTED);
+    mockCheckAccuracy.mockResolvedValue('reduced');
+    mockRequestAccuracy.mockResolvedValue('reduced');
 
-    mockCheck.mockResolvedValue(RESULTS.DENIED);
-    // doc 06 §2: a denial is a soft anti-cheat flag, never a blocked walk. The
-    // same dialog on Tuesday will not change their mind — it will just be the
-    // thing they remember about the app.
-    await expect(requestMotionPermissionOnce()).resolves.toBe('denied');
-
-    expect(mockRequest).toHaveBeenCalledTimes(1);
-    expect(mockCheck).toHaveBeenCalledTimes(1);
+    await expect(requestLocationPermission()).resolves.toBe('approximate');
   });
 
-  it('records that it asked even when the answer was no', async () => {
-    mockRequest.mockResolvedValue(RESULTS.BLOCKED);
-    await requestMotionPermissionOnce();
+  it('never lets a failed accuracy read block a grant', async () => {
+    mockCheck.mockResolvedValue(RESULTS.GRANTED);
+    mockCheckAccuracy.mockRejectedValue(new Error('no handler'));
 
-    expect(storage.getBoolean(StorageKeys.motionPermissionAsked)).toBe(true);
+    await expect(checkLocationPermission()).resolves.toBe('granted');
   });
 
-  it('treats a device with no motion sensor as unavailable, not an error', async () => {
-    mockRequest.mockRejectedValue(new Error('no such permission'));
+  it('turns a failed request into "unavailable" rather than throwing', async () => {
+    mockRequest.mockRejectedValue(new Error('No permission handler detected'));
 
-    await expect(requestMotionPermissionOnce()).resolves.toBe('unavailable');
+    await expect(requestLocationPermission()).resolves.toBe('unavailable');
+  });
+});
+
+describe('requestWalkNotificationsOnce', () => {
+  beforeEach(() => {
+    storage.remove(StorageKeys.notificationPermissionAsked);
+  });
+
+  it('asks once on Android 13+, and never again', async () => {
+    onAndroid(33);
+
+    await requestWalkNotificationsOnce();
+    await requestWalkNotificationsOnce();
+
+    expect(mockRequestNotifications).toHaveBeenCalledTimes(1);
+    expect(storage.getBoolean(StorageKeys.notificationPermissionAsked)).toBe(true);
+  });
+
+  it('does not ask below Android 13, where no runtime permission exists', async () => {
+    onAndroid(32);
+
+    await requestWalkNotificationsOnce();
+
+    expect(mockRequestNotifications).not.toHaveBeenCalled();
+  });
+
+  it('does not ask on iOS, where nothing posts a notification yet', async () => {
+    await requestWalkNotificationsOnce();
+
+    expect(mockRequestNotifications).not.toHaveBeenCalled();
   });
 });

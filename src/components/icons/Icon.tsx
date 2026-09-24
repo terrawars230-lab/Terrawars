@@ -34,7 +34,9 @@ export type IconName =
   | 'trash'
   | 'walk'
   | 'settings'
-  | 'alert';
+  | 'alert'
+  | 'check'
+  | 'chevronRight';
 
 export interface IconProps {
   name: IconName;
@@ -82,6 +84,9 @@ const PATHS: Record<IconName, string[]> = {
     'M19.5 12a7.6 7.6 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7.5 7.5 0 0 0-2.1-1.2L14.6 3h-4l-.4 2.7a7.5 7.5 0 0 0-2.1 1.2l-2.3-1-2 3.4 2 1.5a7.6 7.6 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7.5 7.5 0 0 0 2.1 1.2l.4 2.7h4l.4-2.7a7.5 7.5 0 0 0 2.1-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2Z',
   ],
   alert: ['M12 3.5 2.5 20h19L12 3.5Z', 'M12 9.5v5'],
+  check: ['M5 12.5 10 17.5 19 7'],
+  // A disclosure chevron — "this row opens something".
+  chevronRight: ['M9.5 5.5 16 12l-6.5 6.5'],
 };
 
 /** Icons that need a solid dot the stroke cannot express. */

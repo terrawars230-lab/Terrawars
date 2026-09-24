@@ -1,0 +1,15 @@
+<resources>
+
+    <!-- Android 12+ system splash screen: the brand background behind the
+         launcher icon, instead of the white default. -->
+    <style name="AppTheme" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <item name="android:windowBackground">@color/brand_background</item>
+        <item name="colorPrimary">@color/brand_surface</item>
+        <item name="colorAccent">@color/brand_accent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:windowSplashScreenBackground">@color/brand_background</item>
+    </style>
+
+</resources>

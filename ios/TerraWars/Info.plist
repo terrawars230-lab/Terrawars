@@ -38,7 +38,16 @@
 	     cause of first-session drop-off. The full-screen rationale is shown by
 	     the app BEFORE this dialog; this string is the one-line reminder. -->
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>TerraWars records your route only while a walk is running, so it can work out the area you enclosed. Other players never see your route or live position.</string>
+	<string>TerraWars records your route only while a walk is running — including when your screen is locked during that walk — to work out the territory you enclose. Other players never see your route or your live position.</string>
+
+	<!-- iOS 14+: with "Precise Location" off, the app asks for temporary full
+	     accuracy for the walk (requestLocationAccuracy, purpose key
+	     WalkTracking). An approximate fix kilometres wide cannot trace a walk. -->
+	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
+	<dict>
+		<key>WalkTracking</key>
+		<string>A walk needs your precise location to trace your route and measure the territory you enclose.</string>
+	</dict>
 
 	<!--
 	  NSLocationAlwaysAndWhenInUseUsageDescription is deliberately ABSENT.
@@ -54,9 +63,11 @@
 		<string>location</string>
 	</array>
 
-	<!-- doc 06 §2: the step-counter cross-check. -->
-	<key>NSMotionUsageDescription</key>
-	<string>TerraWars compares your step count with your recorded route to confirm the walk really happened.</string>
+	<!--
+	  NSMotionUsageDescription is deliberately absent. The doc 06 §2 step-count
+	  cross-check is not built yet, and App Review rejects a purpose string for
+	  a permission the app never uses. Add it back with that feature.
+	-->
 
 	<!-- Deep links: OAuth callback and FR-42 raid notifications. -->
 	<key>CFBundleURLTypes</key>
@@ -75,6 +86,10 @@
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>arm64</string>
+		<!-- The game is played by walking with GPS; mirrors Android's
+		     required android.hardware.location.gps feature. -->
+		<string>location-services</string>
+		<string>gps</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -88,6 +103,17 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<!-- Nocturne is dark-only: system chrome (alerts, keyboards, pickers) and
+	     the status bar match it from the first frame. -->
+	<key>UIUserInterfaceStyle</key>
+	<string>Dark</string>
+	<key>UIStatusBarStyle</key>
+	<string>UIStatusBarStyleLightContent</string>
+	<!-- Export compliance: the app uses only the encryption built into the OS
+	     (HTTPS/TLS), which is exempt. Without this key every TestFlight and App
+	     Store upload stops to ask. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
 </plist>

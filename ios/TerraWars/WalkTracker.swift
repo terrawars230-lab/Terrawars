@@ -19,8 +19,15 @@ import React
  - **`pausesLocationUpdatesAutomatically = false`.** iOS otherwise pauses
    updates when it decides the user has stopped moving, which silently punches
    a hole in the middle of a walk — and a walk with a gap does not close a loop.
+ - **`kCLLocationAccuracyBest`, not `…BestForNavigation`.** Apple intends the
+   navigation level for a phone on a charger; on foot, for an hour, it spends
+   the NFR-01 battery budget for accuracy GR-01 then throws away.
  - **No filtering or decision-making here.** Samples go straight to JS; GR-01
    runs in TypeScript for the preview and in Postgres for the verdict.
+ - **All state lives on the main queue.** The delegate is called there, so
+   every exported method hops there before touching it.
+
+ Keep every `@objc(...)` selector in exact step with WalkTracker.m.
  */
 @objc(WalkTracker)
 class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
@@ -31,9 +38,14 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
   private var sampleCount = 0
   private var hasListeners = false
 
-  /// Resolves the one-shot `getCurrentPosition` request, if one is in flight.
-  private var oneShotResolve: RCTPromiseResolveBlock?
-  private var oneShotReject: RCTPromiseRejectBlock?
+  /// One-shot `getCurrentPosition` requests still waiting for a fix, by id, so
+  /// two overlapping requests each get an answer and each timeout only ever
+  /// settles its own request.
+  private struct PendingFix {
+    let resolve: RCTPromiseResolveBlock
+    let reject: RCTPromiseRejectBlock
+  }
+  private var pendingFixes: [UUID: PendingFix] = [:]
 
   private enum Event: String, CaseIterable {
     case sample = "WalkTracker:sample"
@@ -44,7 +56,7 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
   override init() {
     super.init()
     manager.delegate = self
-    manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+    manager.desiredAccuracy = kCLLocationAccuracyBest
     manager.activityType = .fitness
     manager.pausesLocationUpdatesAutomatically = false
   }
@@ -88,6 +100,13 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
         break
       }
 
+      // A second start on a live recording would reset its counters and pause
+      // state. The recording is already running; leave it exactly as it is.
+      if self.isTracking {
+        resolve(nil)
+        return
+      }
+
       // FR-12: 5 m distance filter.
       let distanceFilter = (options["distanceFilterM"] as? NSNumber)?.doubleValue ?? 5
       self.manager.distanceFilter = distanceFilter
@@ -112,39 +131,50 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
   }
 
   @objc(pause:rejecter:)
-  func pause(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    // FR-16: paused time records nothing. The manager keeps running so the
-    // fix stays warm — restarting it costs a 10–20 s reacquisition, which the
-    // user would experience as a hole at the start of the resumed segment.
-    isPaused = true
-    resolve(nil)
+  func pause(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      // FR-16: paused time records nothing. The manager keeps running so the
+      // fix stays warm — restarting it costs a 10–20 s reacquisition, which the
+      // user would experience as a hole at the start of the resumed segment.
+      self.isPaused = true
+      resolve(nil)
+    }
   }
 
   @objc(resume:rejecter:)
-  func resume(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    isPaused = false
-    resolve(nil)
+  func resume(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      self.isPaused = false
+      resolve(nil)
+    }
   }
 
   @objc(stop:rejecter:)
-  func stop(resolve: @escaping RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
+  func stop(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
     DispatchQueue.main.async {
+      let wasTracking = self.isTracking
       self.manager.stopUpdatingLocation()
-      self.manager.allowsBackgroundLocationUpdates = false
+      if Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") != nil {
+        self.manager.allowsBackgroundLocationUpdates = false
+      }
       self.isTracking = false
       self.isPaused = false
-      self.emit(.stopped, ["reason": "user"])
+      if wasTracking {
+        self.emit(.stopped, ["reason": "user"])
+      }
       resolve(nil)
     }
   }
 
   @objc(getStatus:rejecter:)
-  func getStatus(resolve: RCTPromiseResolveBlock, reject: RCTPromiseRejectBlock) {
-    resolve([
-      "isTracking": isTracking,
-      "isPaused": isPaused,
-      "sampleCount": sampleCount,
-    ])
+  func getStatus(resolve: @escaping RCTPromiseResolveBlock, reject: @escaping RCTPromiseRejectBlock) {
+    DispatchQueue.main.async {
+      resolve([
+        "isTracking": self.isTracking,
+        "isPaused": self.isPaused,
+        "sampleCount": self.sampleCount,
+      ])
+    }
   }
 
   /// One-shot fix for centring the map before a walk starts (FR-53).
@@ -161,16 +191,20 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
         return
       }
 
-      self.oneShotResolve = resolve
-      self.oneShotReject = reject
-      self.manager.requestLocation()
+      let id = UUID()
+      self.pendingFixes[id] = PendingFix(resolve: resolve, reject: reject)
 
-      let timeout = timeoutMs.doubleValue / 1000
+      // While a walk records, fixes are already arriving and the next one
+      // answers this request. requestLocation() is only for when nothing is
+      // running — it must never disturb a recording in progress.
+      if !self.isTracking {
+        self.manager.requestLocation()
+      }
+
+      let timeout = max(1, timeoutMs.doubleValue / 1000)
       DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-        guard let pendingReject = self.oneShotReject else { return }
-        self.oneShotResolve = nil
-        self.oneShotReject = nil
-        pendingReject("E_NO_FIX", "Timed out waiting for a location fix", nil)
+        guard let pending = self.pendingFixes.removeValue(forKey: id) else { return }
+        pending.reject("E_NO_FIX", "Timed out waiting for a location fix", nil)
       }
     }
   }
@@ -189,11 +223,16 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
   // MARK: - CLLocationManagerDelegate
 
   func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-    if let pendingResolve = oneShotResolve, let location = locations.last {
-      oneShotResolve = nil
-      oneShotReject = nil
-      pendingResolve(serialise(location))
-      return
+    // Answer every waiting one-shot request — and then carry on. Returning
+    // here, as this used to, silently dropped the walk samples in the same
+    // batch whenever the map asked for a fix mid-walk.
+    if let latest = locations.last, !pendingFixes.isEmpty {
+      let waiting = pendingFixes
+      pendingFixes.removeAll()
+      let payload = serialise(latest)
+      for (_, fix) in waiting {
+        fix.resolve(payload)
+      }
     }
 
     guard isTracking, !isPaused else { return }
@@ -205,11 +244,12 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
   }
 
   func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-    if let pendingReject = oneShotReject {
-      oneShotResolve = nil
-      oneShotReject = nil
-      pendingReject("E_LOCATION_FAILED", error.localizedDescription, error)
-      return
+    if !pendingFixes.isEmpty {
+      let waiting = pendingFixes
+      pendingFixes.removeAll()
+      for (_, fix) in waiting {
+        fix.reject("E_LOCATION_FAILED", error.localizedDescription, error)
+      }
     }
 
     // `.locationUnknown` is transient — iOS is still working on a fix and will
@@ -217,6 +257,8 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
     // user who is simply standing between two buildings.
     if let clError = error as? CLError, clError.code == .locationUnknown { return }
 
+    // A failed one-shot request is not a walk error.
+    guard isTracking else { return }
     emit(.error, ["message": error.localizedDescription])
   }
 
@@ -226,6 +268,7 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
       if isTracking {
         manager.stopUpdatingLocation()
         isTracking = false
+        isPaused = false
         emit(.stopped, ["reason": "permission-revoked"])
       }
     default:
@@ -249,7 +292,7 @@ class WalkTracker: RCTEventEmitter, CLLocationManagerDelegate {
       // doc 06 §2. iOS exposes far less than Android here: `sourceInformation`
       // reports simulated locations from iOS 15 on, and there is no equivalent
       // of Android's mock-provider flag. This is why the server never trusts
-      // the client signal and Play Integrity / device checks carry the weight.
+      // the client signal and device checks carry the weight.
       "isMock": Self.isSimulated(location),
     ]
   }

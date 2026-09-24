@@ -6,6 +6,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
@@ -13,6 +14,8 @@ import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -38,13 +41,16 @@ import com.terrawars.R
  * without it, and asking for it would trigger Play's sensitive-permission
  * review for no gain.
  *
- * The service holds no walk state beyond a sample counter. Points are handed
- * straight to JS, which persists every one of them immediately (FR-15) — if
- * this process is killed, nothing is lost that had already been emitted.
+ * The service holds no walk state beyond counters and the notification clock.
+ * Points are handed straight to JS, which persists every one of them
+ * immediately (FR-15) — if this process is killed, nothing is lost that had
+ * already been emitted.
  */
 class WalkTrackingService : Service() {
 
   companion object {
+    private const val TAG = "WalkTrackingService"
+
     const val ACTION_START = "com.terrawars.walk.START"
     const val ACTION_PAUSE = "com.terrawars.walk.PAUSE"
     const val ACTION_RESUME = "com.terrawars.walk.RESUME"
@@ -56,8 +62,7 @@ class WalkTrackingService : Service() {
      * Separate from ACTION_START because it is delivered every ten seconds
      * while the HUD ticks. Routing it through handleStart re-registered the
      * location request, reset the paused flag and zeroed the sample counter on
-     * every tick — which restarted the GPS cadence mid-walk, silently
-     * un-paused a paused walk, and made the distance readout jump.
+     * every tick.
      */
     const val ACTION_UPDATE_NOTIFICATION = "com.terrawars.walk.UPDATE_NOTIFICATION"
 
@@ -65,6 +70,8 @@ class WalkTrackingService : Service() {
     const val EXTRA_MAX_INTERVAL_MS = "maxIntervalMs"
     const val EXTRA_NOTIFICATION_TITLE = "notificationTitle"
     const val EXTRA_NOTIFICATION_BODY = "notificationBody"
+    /** Walking time already on the clock, so a resumed walk's timer continues. */
+    const val EXTRA_ELAPSED_MS = "elapsedMs"
 
     private const val CHANNEL_ID = "walk_tracking"
     private const val NOTIFICATION_ID = 4201
@@ -90,6 +97,22 @@ class WalkTrackingService : Service() {
     @Volatile
     var sampleCount: Int = 0
       private set
+
+    /**
+     * Whether a location foreground service may start right now.
+     *
+     * From Android 14 `startForeground` with the location type THROWS when no
+     * location permission is held — and because the service was launched with
+     * `startForegroundService`, failing to reach `startForeground` then crashes
+     * the whole app a few seconds later ("did not then call startForeground").
+     * There is no way to recover inside the service, so the module checks this
+     * BEFORE starting it at all.
+     */
+    fun hasLocationPermission(context: Context): Boolean =
+      ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED ||
+        ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+        PackageManager.PERMISSION_GRANTED
   }
 
   /** Implemented by the native module. */
@@ -102,6 +125,15 @@ class WalkTrackingService : Service() {
   private lateinit var fusedClient: FusedLocationProviderClient
   private var notificationTitle: String = "Walk in progress"
   private var notificationBody: String = ""
+
+  /**
+   * The notification's running clock (FR-11), kept here rather than pushed from
+   * JS: JS timers stop firing once the screen is off, which is exactly when
+   * the notification is being looked at. The system renders a chronometer by
+   * itself, so the elapsed time stays live with no updates at all.
+   */
+  private var accumulatedActiveMs: Long = 0L
+  private var activeSinceElapsedRealtime: Long = 0L
 
   private val locationCallback = object : LocationCallback() {
     override fun onLocationResult(result: LocationResult) {
@@ -172,10 +204,21 @@ class WalkTrackingService : Service() {
       return
     }
 
-    startAsForeground()
+    accumulatedActiveMs = intent.getLongExtra(EXTRA_ELAPSED_MS, 0L).coerceAtLeast(0L)
+    activeSinceElapsedRealtime = SystemClock.elapsedRealtime()
+    isPaused = false
 
-    if (!hasLocationPermission()) {
+    // startForeground must be reached within seconds of startForegroundService
+    // or the app is killed, so it comes first — before anything that can fail.
+    if (!startAsForeground()) {
+      listener?.onStopped("error")
+      stopSelf()
+      return
+    }
+
+    if (!hasLocationPermission(this)) {
       listener?.onStopped("permission-revoked")
+      stopForegroundCompat()
       stopSelf()
       return
     }
@@ -199,34 +242,56 @@ class WalkTrackingService : Service() {
     try {
       fusedClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
       isRunning = true
-      isPaused = false
       sampleCount = 0
+      updateNotification()
     } catch (error: SecurityException) {
       listener?.onStopped("permission-revoked")
+      stopForegroundCompat()
       stopSelf()
     } catch (error: Exception) {
+      Log.e(TAG, "Could not start location updates", error)
       listener?.onError(error.message ?: "Could not start location updates")
+      stopForegroundCompat()
       stopSelf()
     }
   }
 
   private fun handlePause() {
-    isPaused = true
+    // A pause for a service that is not recording would otherwise create one —
+    // not in the foreground — just to post an orphaned notification.
+    if (!isRunning) {
+      stopSelf()
+      return
+    }
+    if (!isPaused) {
+      accumulatedActiveMs += SystemClock.elapsedRealtime() - activeSinceElapsedRealtime
+      isPaused = true
+    }
     updateNotification()
   }
 
   private fun handleResume() {
-    isPaused = false
+    if (!isRunning) {
+      stopSelf()
+      return
+    }
+    if (isPaused) {
+      activeSinceElapsedRealtime = SystemClock.elapsedRealtime()
+      isPaused = false
+    }
     updateNotification()
   }
 
   private fun handleStop(reason: String) {
+    val wasRunning = isRunning
     fusedClient.removeLocationUpdates(locationCallback)
     isRunning = false
     isPaused = false
-    listener?.onStopped(reason)
+    if (wasRunning) {
+      listener?.onStopped(reason)
+    }
 
-    stopForeground(STOP_FOREGROUND_REMOVE)
+    stopForegroundCompat()
     stopSelf()
   }
 
@@ -236,6 +301,7 @@ class WalkTrackingService : Service() {
       // so the user can be offered their partial walk rather than losing it.
       fusedClient.removeLocationUpdates(locationCallback)
       isRunning = false
+      isPaused = false
       listener?.onStopped("killed-by-system")
     }
     super.onDestroy()
@@ -245,28 +311,45 @@ class WalkTrackingService : Service() {
 
   // ── Notification (FR-11) ──────────────────────────────────────────────────
 
-  private fun startAsForeground() {
-    val notification = buildNotification()
+  /**
+   * Promotes the service to the foreground. Returns false instead of crashing
+   * when the platform refuses — a background-start restriction on Android 12+,
+   * or a missing permission on 14+ — so the caller can stop cleanly.
+   */
+  private fun startAsForeground(): Boolean {
+    return try {
+      val notification = buildNotification()
 
-    // Android 14+ requires the foreground service type at start time, and it
-    // must match the manifest declaration or the start throws.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
-    } else {
-      startForeground(NOTIFICATION_ID, notification)
+      // Android 14+ requires the foreground service type at start time, and it
+      // must match the manifest declaration or the start throws.
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+      } else {
+        startForeground(NOTIFICATION_ID, notification)
+      }
+      true
+    } catch (error: Exception) {
+      Log.e(TAG, "startForeground was refused", error)
+      false
+    }
+  }
+
+  private fun stopForegroundCompat() {
+    try {
+      stopForeground(STOP_FOREGROUND_REMOVE)
+    } catch (error: Exception) {
+      Log.w(TAG, "stopForeground failed", error)
     }
   }
 
   private fun updateNotification() {
-    val manager = getSystemService(NotificationManager::class.java)
-    manager?.notify(NOTIFICATION_ID, buildNotification())
-  }
-
-  /** Called by the native module to show live distance and duration (FR-11). */
-  fun updateNotificationText(title: String, body: String) {
-    notificationTitle = title
-    notificationBody = body
-    updateNotification()
+    try {
+      val manager = getSystemService(NotificationManager::class.java)
+      manager?.notify(NOTIFICATION_ID, buildNotification())
+    } catch (error: Exception) {
+      // A notification refresh is cosmetic and must never end a walk.
+      Log.w(TAG, "Could not refresh the walk notification", error)
+    }
   }
 
   private fun buildNotification(): Notification {
@@ -279,19 +362,35 @@ class WalkTrackingService : Service() {
       PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
-    return NotificationCompat.Builder(this, CHANNEL_ID)
+    val builder = NotificationCompat.Builder(this, CHANNEL_ID)
       .setContentTitle(notificationTitle)
       .setContentText(notificationBody)
-      .setSmallIcon(R.mipmap.ic_launcher)
+      // A monochrome glyph: status-bar icons are drawn as an alpha mask, and
+      // the full-colour launcher icon renders there as a blank white square.
+      .setSmallIcon(R.drawable.ic_stat_walk)
+      .setColor(getColor(R.color.brand_accent))
       .setContentIntent(contentIntent)
       .setOngoing(true)
       .setSilent(true)
-      .setCategory(NotificationCompat.CATEGORY_SERVICE)
+      .setOnlyAlertOnce(true)
+      .setCategory(NotificationCompat.CATEGORY_WORKOUT)
       // The notification shows distance walked. That is not secret, but it is
       // personal, so it stays off a locked screen.
       .setVisibility(NotificationCompat.VISIBILITY_SECRET)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-      .build()
+
+    if (isRunning && !isPaused) {
+      // `when` is chosen so the system chronometer reads the walking time,
+      // pauses excluded (FR-16), and ticks without any help from JS.
+      val activeMs = accumulatedActiveMs + (SystemClock.elapsedRealtime() - activeSinceElapsedRealtime)
+      builder.setUsesChronometer(true)
+        .setShowWhen(true)
+        .setWhen(System.currentTimeMillis() - activeMs)
+    } else {
+      builder.setUsesChronometer(false).setShowWhen(false)
+    }
+
+    return builder.build()
   }
 
   private fun createNotificationChannel() {
@@ -312,10 +411,4 @@ class WalkTrackingService : Service() {
 
     manager.createNotificationChannel(channel)
   }
-
-  private fun hasLocationPermission(): Boolean =
-    ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
-      PackageManager.PERMISSION_GRANTED ||
-      ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
-      PackageManager.PERMISSION_GRANTED
 }

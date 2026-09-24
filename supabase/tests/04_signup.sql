@@ -245,6 +245,23 @@ $$;
 -- SECURITY DEFINER function. If one were missed it would fail here rather than
 -- in a user's hands.
 
+select test.section('get_me reports no deletion for an ordinary account');
+
+do $$
+declare
+  v_id uuid := test.create_player('ordinary');
+begin
+  perform test.act_as(v_id);
+  perform set_config('role', 'authenticated', true);
+
+  perform test.eq(public.get_me() ->> 'deletion_requested', 'false',
+                  'FR-06: an account nobody asked to delete is not flagged');
+
+  perform set_config('role', 'none', true);
+  perform test.act_as(null);
+end;
+$$;
+
 select test.section('the profile RPCs survive the column lockdown');
 
 do $$
@@ -269,6 +286,10 @@ begin
   v_result := public.request_account_deletion();
   perform test.eq(v_result ->> 'status', 'deletion_requested',
                   'FR-06: account deletion still writes deleted_at');
+
+  -- FR-06: the app reads this to stop a pending-deletion account from playing.
+  perform test.eq(public.get_me() ->> 'deletion_requested', 'true',
+                  'FR-06: get_me reports the deletion grace period');
 
   perform set_config('role', 'none', true);
 

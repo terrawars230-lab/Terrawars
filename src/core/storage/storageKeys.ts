@@ -16,13 +16,13 @@ export const StorageKeys = {
   /** Whether the OEM battery-settings guidance has been shown (doc 06 §8.2). */
   batteryGuidanceShown: 'onboarding.battery.v1',
   /**
-   * Whether the motion/activity permission has ever been requested.
+   * Whether the Android 13+ notification permission has been requested.
    *
-   * doc 06 §2 makes a motion denial a soft anti-cheat flag, never a blocked
-   * walk — so re-prompting on every walk start is friction that buys nothing.
-   * Asked once, then never again from the app.
+   * It only decides whether the FR-11 walk notification is visible in the
+   * shade — tracking runs either way — so it is asked once, before the first
+   * walk, and never nagged about again.
    */
-  motionPermissionAsked: 'permissions.motionAsked.v1',
+  notificationPermissionAsked: 'permissions.notificationsAsked.v1',
 
   /** Cached `game_config` snapshot, so a cold offline start still has tunables. */
   gameConfig: 'game.config.v1',
@@ -36,7 +36,6 @@ export const StorageKeys = {
   preferredLocale: 'prefs.locale.v1',
   notificationPrefs: 'prefs.notifications.v1',
   mapShowOnlyMine: 'prefs.map.onlyMine.v1',
-  hideWalkStart: 'prefs.privacy.hideWalkStart.v1',
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

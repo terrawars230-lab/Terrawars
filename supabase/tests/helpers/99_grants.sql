@@ -49,6 +49,13 @@ revoke update on public.profiles from anon, authenticated;
 grant update (display_name, avatar_url, home_city, home_region)
   on public.profiles to authenticated;
 
+-- And for the walks column grants (migration 20260922120000).
+revoke insert, update on public.walks from anon, authenticated;
+grant insert (user_id, client_walk_id, started_at, device_meta)
+  on public.walks to authenticated;
+grant update (status, ended_at)
+  on public.walks to authenticated;
+
 -- The suite's own role must be able to switch into the client roles.
 do $$
 begin

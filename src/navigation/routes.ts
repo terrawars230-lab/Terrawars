@@ -10,6 +10,10 @@ export const Routes = {
   Onboarding: 'Onboarding',
   SignIn: 'SignIn',
   SignUp: 'SignUp',
+  ConfirmEmail: 'ConfirmEmail',
+  ForgotPassword: 'ForgotPassword',
+  VerifyOtp: 'VerifyOtp',
+  ResetPassword: 'ResetPassword',
 
   // Post-auth, pre-play
   ChooseUsername: 'ChooseUsername',

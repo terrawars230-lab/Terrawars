@@ -1,7 +1,9 @@
 import {DEFAULT_GAME_CONFIG} from '@core/constants/gameConfig';
+import {storage} from '@core/storage/storage';
+import {StorageKeys} from '@core/storage/storageKeys';
 import type {GpsSample} from '@core/types/geo';
 
-import {useWalkStore} from '../store/walkStore';
+import {adoptRestoredWalk, useWalkStore, type PersistedWalk} from '../store/walkStore';
 
 /**
  * The HUD readouts.
@@ -184,5 +186,55 @@ describe('walk store — live pace', () => {
 
     // A paused walk has no speed, and showing the last one would be a lie.
     expect(useWalkStore.getState().recentSpeedMps()).toBe(0);
+  });
+});
+
+describe('walk store — recovery after a kill (FR-15, FR-16)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    useWalkStore.getState().reset();
+  });
+
+  function persisted(overrides: Partial<PersistedWalk> = {}): PersistedWalk {
+    return {
+      walkId: 'walk-1',
+      clientWalkId: 'client-1',
+      startedAt: START,
+      pausedMs: 0,
+      samples: [0, 1, 2].map((i, seq) => ({...walkedTo(i * 10, i * 60_000), seq})),
+      uploadedThroughSeq: -1,
+      ...overrides,
+    };
+  }
+
+  it('does not count the time the app was dead as walking', () => {
+    // Last fix two minutes in; the app died and came back an hour later.
+    jest.spyOn(Date, 'now').mockReturnValue(START + 60 * 60_000);
+
+    adoptRestoredWalk(persisted(), DEFAULT_GAME_CONFIG);
+
+    expect(useWalkStore.getState().phase).toBe('paused');
+    expect(useWalkStore.getState().elapsedSeconds()).toBe(120);
+  });
+
+  it('does not count an open pause as walking either', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(START + 60 * 60_000);
+
+    // Paused one minute in (after a 30 s earlier pause), killed while paused.
+    adoptRestoredWalk(
+      persisted({pausedMs: 30_000, pausedAt: START + 90_000}),
+      DEFAULT_GAME_CONFIG,
+    );
+
+    expect(useWalkStore.getState().elapsedSeconds()).toBe(60);
+  });
+
+  it('persists the pause itself, so a kill while paused keeps it', () => {
+    beginWalk();
+    useWalkStore.getState().addSample(walkedTo(0, 0));
+    useWalkStore.getState().pause();
+
+    const stored = storage.getObject<PersistedWalk>(StorageKeys.activeWalk);
+    expect(stored?.pausedAt).toEqual(expect.any(Number));
   });
 });

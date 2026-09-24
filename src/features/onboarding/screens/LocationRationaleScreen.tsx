@@ -6,28 +6,30 @@ import {useNavigation, useRoute, type RouteProp} from '@react-navigation/native'
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {useTranslation} from 'react-i18next';
 
-import {Button, Loader, Screen, Text} from '@components/index';
+import {Button, Icon, Loader, Screen, Text} from '@components/index';
 import {makeStyles} from '@core/theme/ThemeProvider';
 import type {RootStackParamList} from '@navigation/types';
 import {
   checkLocationPermission,
   openAppSettings,
   requestLocationPermission,
-  requestMotionPermissionOnce,
+  requestWalkNotificationsOnce,
+  type PermissionOutcome,
 } from '@services/permissions/permissions';
 
 /**
  * The prominent disclosure required before the system permission dialog
  * (doc 06 §5, FR-10).
  *
- * This screen is not a nicety. Play policy requires a prominent disclosure for
- * continuous location, and doc 06 §5 names a context-free permission prompt as
- * the main cause of first-session drop-off. On Android it also has to be right
- * first time: a second denial is permanent, and this screen is the only chance
- * to explain before that happens.
+ * This screen is not a nicety. Google Play's User Data policy requires a
+ * prominent, in-app disclosure — shown before the runtime prompt, in the
+ * normal flow of the app — that says what is collected, when, how it is used
+ * and whether it is shared. It must describe collection while the screen is
+ * off or another app is open, because the walk keeps recording then. On
+ * Android it also has to be right first time: a second denial is permanent.
  *
- * The three bullets are the three things a reasonable person actually wants to
- * know — when, who sees it, how long it is kept.
+ * The bullets are the things a reasonable person actually wants to know —
+ * when, who sees it, how long it is kept.
  */
 export function LocationRationaleScreen(): React.JSX.Element {
   const {t} = useTranslation();
@@ -37,7 +39,7 @@ export function LocationRationaleScreen(): React.JSX.Element {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'LocationRationale'>>();
 
-  const [isBlocked, setIsBlocked] = useState(false);
+  const [outcome, setOutcome] = useState<PermissionOutcome | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   /** True until we know whether this screen needs to be shown at all. */
   const [isChecking, setIsChecking] = useState(true);
@@ -53,12 +55,11 @@ export function LocationRationaleScreen(): React.JSX.Element {
   }, [navigation, returnTo]);
 
   /**
-   * Skips this screen when location is already granted.
+   * Skips this screen when a precise grant already exists.
    *
    * doc 06 §5 requires the disclosure *before the system dialog*. Once the
    * grant exists there is no dialog left to precede, so showing it again is
-   * pure friction — and this screen sits in front of every single walk, which
-   * is why it read as the app asking for permission over and over.
+   * pure friction.
    */
   const hasChecked = useRef(false);
   useEffect(() => {
@@ -68,14 +69,12 @@ export function LocationRationaleScreen(): React.JSX.Element {
     hasChecked.current = true;
 
     void (async () => {
-      const outcome = await checkLocationPermission();
-      if (outcome === 'granted') {
+      const current = await checkLocationPermission();
+      if (current === 'granted') {
         proceed();
         return;
       }
-      if (outcome === 'blocked') {
-        setIsBlocked(true);
-      }
+      setOutcome(current);
       setIsChecking(false);
     })();
   }, [proceed]);
@@ -83,23 +82,17 @@ export function LocationRationaleScreen(): React.JSX.Element {
   const handleGrant = useCallback(async () => {
     setIsRequesting(true);
     try {
-      const outcome = await requestLocationPermission();
+      const result = await requestLocationPermission();
+      setOutcome(result);
 
-      if (outcome === 'blocked') {
-        // Cannot be asked again in-app. The only route left is Settings.
-        setIsBlocked(true);
+      if (result !== 'granted') {
         return;
       }
 
-      if (outcome !== 'granted') {
-        return;
-      }
-
-      // doc 06 §2: the step-counter cross-check. Asked after location, once
-      // ever — a refusal is a soft flag, never a blocked walk, so re-prompting
-      // before every walk would cost goodwill and buy no signal.
-      await requestMotionPermissionOnce();
-
+      // Android 13+: the walk's own notification. Asked right after location,
+      // once ever, under the same explanation — and a refusal changes nothing
+      // about whether the walk records.
+      await requestWalkNotificationsOnce();
       proceed();
     } finally {
       setIsRequesting(false);
@@ -116,10 +109,19 @@ export function LocationRationaleScreen(): React.JSX.Element {
     );
   }
 
+  const isBlocked = outcome === 'blocked';
+  const isApproximate = outcome === 'approximate';
+
   return (
     <Screen scrollable>
       <View style={styles.container}>
-        <Text variant="title1">{t('permissions.locationTitle')}</Text>
+        <View style={styles.badge}>
+          <Icon name="crosshair" size={30} color="accent" />
+        </View>
+
+        <Text variant="title1" accessibilityRole="header">
+          {t('permissions.locationTitle')}
+        </Text>
         <Text variant="body" color="textSecondary">
           {t('permissions.locationBody')}
         </Text>
@@ -136,6 +138,18 @@ export function LocationRationaleScreen(): React.JSX.Element {
           </Text>
         ) : null}
 
+        {isApproximate ? (
+          <Text variant="caption" color="warning" accessibilityRole="alert">
+            {t('permissions.locationApproximate')}
+          </Text>
+        ) : null}
+
+        {outcome === 'unavailable' ? (
+          <Text variant="caption" color="danger" accessibilityRole="alert">
+            {t('permissions.locationUnavailable')}
+          </Text>
+        ) : null}
+
         <View style={styles.actions}>
           {isBlocked ? (
             <Button
@@ -146,14 +160,23 @@ export function LocationRationaleScreen(): React.JSX.Element {
             />
           ) : (
             <Button
-              label={t('permissions.locationGrant')}
+              label={isApproximate ? t('permissions.locationGrantPrecise') : t('permissions.locationGrant')}
               loading={isRequesting}
               onPress={() => {
                 void handleGrant();
               }}
             />
           )}
-          <Button label={t('common.back')} variant="ghost" onPress={() => navigation.goBack()} />
+          {isApproximate ? (
+            <Button
+              label={t('permissions.locationOpenSettings')}
+              variant="secondary"
+              onPress={() => {
+                void openAppSettings();
+              }}
+            />
+          ) : null}
+          <Button label={t('common.notNow')} variant="ghost" onPress={() => navigation.goBack()} />
         </View>
       </View>
     </Screen>
@@ -178,6 +201,14 @@ const useStyles = makeStyles(theme => ({
     justifyContent: 'center',
     gap: theme.spacing.lg,
     paddingVertical: theme.spacing.xxl,
+  },
+  badge: {
+    width: 64,
+    height: 64,
+    borderRadius: theme.radius.pill,
+    backgroundColor: theme.colors.accentWash,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   bullets: {
     gap: theme.spacing.md,
