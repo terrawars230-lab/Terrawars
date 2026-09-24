@@ -291,6 +291,7 @@ export interface Database {
       get_me: {Args: Record<string, never>; Returns: Json};
       get_public_profile: {Args: {p_username: string}; Returns: Json};
       is_username_available: {Args: {p_username: string}; Returns: boolean};
+      set_username: {Args: {p_username: string}; Returns: Json};
       update_my_color: {Args: {p_color_hex: string}; Returns: Json};
       request_account_deletion: {Args: Record<string, never>; Returns: Json};
       user_global_rank: {Args: {p_user_id: string}; Returns: number};

@@ -56,7 +56,32 @@
     "signOut": "Sign out",
     "invalidCredentials": "That email and password don't match an account.",
     "emailInvalid": "Enter a valid email address.",
-    "passwordTooShort": "Use at least 8 characters."
+    "passwordTooShort": "Use at least 8 characters.",
+    "confirmEmailTitle": "Check your inbox",
+    "confirmEmailBody": "We've sent a confirmation link to {{email}}. Open it and you'll be signed in automatically.",
+    "confirmEmailHint": "Nothing there? Look in spam — it can take a minute.",
+    "resendConfirmation": "Send it again",
+    "confirmationResent": "Sent. Give it a minute to arrive.",
+    "useDifferentEmail": "Use a different email"
+  },
+
+  "passwordReset": {
+    "title": "Reset your password",
+    "subtitle": "Enter your email and we'll send you a 6-digit code.",
+    "sendCode": "Send the code",
+    "otpTitle": "Enter your code",
+    "otpSubtitle": "We sent a 6-digit code to {{email}}. It expires in an hour.",
+    "otpPlaceholder": "123456",
+    "otpTooShort": "The code is 6 digits.",
+    "verify": "Continue",
+    "resend": "Send a new code",
+    "resent": "Sent. Check your inbox again.",
+    "newTitle": "Choose a new password",
+    "newSubtitle": "You'll be signed in once it's saved.",
+    "newPassword": "New password",
+    "repeatPassword": "Repeat new password",
+    "mismatch": "Those two passwords don't match.",
+    "save": "Save password"
   },
 
   "username": {
@@ -200,6 +225,7 @@
     "NOT_FOUND": "We couldn't find that.",
     "ACTIVE_WALK_EXISTS": "You already have a walk in progress.",
     "USERNAME_TAKEN": "That name is taken. Try another.",
+    "USERNAME_ALREADY_SET": "You've already chosen your name.",
     "WALK_ALREADY_FINISHED": "That walk has already been finished.",
     "COLOR_CHANGE_COOLDOWN": "You can change your colour once every 30 days.",
     "RATE_LIMITED": "You've claimed a lot today. Try again later.",
@@ -212,7 +238,9 @@
     "EMAIL_ALREADY_REGISTERED": "An account already uses that email. Try signing in instead.",
     "WEAK_PASSWORD": "Pick a stronger password — at least 8 characters.",
     "SIGNUP_DISABLED": "New accounts aren't being accepted right now.",
-    "EMAIL_RATE_LIMITED": "Too many confirmation emails have gone out. Wait an hour and try again."
+    "EMAIL_RATE_LIMITED": "Too many confirmation emails have gone out. Wait an hour and try again.",
+    "OTP_EXPIRED": "That code has expired or isn't right. Ask for a new one.",
+    "SAME_PASSWORD": "Choose a password you haven't used before."
   },
 
   "leaderboard": {

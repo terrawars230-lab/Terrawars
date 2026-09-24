@@ -1,6 +1,6 @@
 import type {Session} from '@supabase/supabase-js';
 
-import {toApiError} from '@core/api/errorMapping';
+import {parseErrorEnvelope, toApiError} from '@core/api/errorMapping';
 import {supabase} from '@core/api/supabase/client';
 import {createLogger} from '@core/logger/logger';
 
@@ -21,7 +21,18 @@ export interface Credentials {
   password: string;
 }
 
-export async function signUpWithEmail({email, password}: Credentials): Promise<Session | null> {
+export interface SignUpResult {
+  session: Session | null;
+  /**
+   * True when the project requires email confirmation, so no session exists
+   * yet. The caller MUST branch on this: without it, sign-up on a
+   * confirmation-enabled project ends with the spinner stopping and nothing
+   * else happening, which reads as a broken button.
+   */
+  needsEmailConfirmation: boolean;
+}
+
+export async function signUpWithEmail({email, password}: Credentials): Promise<SignUpResult> {
   const {data, error} = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
@@ -35,7 +46,26 @@ export async function signUpWithEmail({email, password}: Credentials): Promise<S
   // trigger, so there is nothing to insert here. A client-side profile insert
   // would race the trigger and hit the unique username constraint.
   logger.info('Signed up', {hasSession: Boolean(data.session)});
-  return data.session;
+
+  return {session: data.session, needsEmailConfirmation: data.session === null};
+}
+
+/**
+ * Re-sends the sign-up confirmation email.
+ *
+ * Without this a user who never received the first one is stuck for good:
+ * signing up again with the same address returns `user_already_exists`, and
+ * signing in returns `email_not_confirmed`. Neither has a way out.
+ */
+export async function resendConfirmationEmail(email: string): Promise<void> {
+  const {error} = await supabase.auth.resend({
+    type: 'signup',
+    email: email.trim().toLowerCase(),
+  });
+
+  if (error) {
+    throw toApiError(error, 'Could not send that email again');
+  }
 }
 
 export async function signInWithEmail({email, password}: Credentials): Promise<Session> {
@@ -96,6 +126,37 @@ export async function sendPasswordReset(email: string): Promise<void> {
   }
 }
 
+/**
+ * FR-01: exchanges the emailed recovery code for a session.
+ *
+ * OTP rather than the magic link in the same email: a link has to survive a
+ * deep link back into the app, and `terrawars://auth/reset` has no route. A
+ * code the user types works with no linking at all.
+ *
+ * Requires `{{ .Token }}` in the Supabase "Reset Password" email template —
+ * the default template only carries the link.
+ */
+export async function verifyPasswordResetOtp(email: string, token: string): Promise<Session> {
+  const {data, error} = await supabase.auth.verifyOtp({
+    email: email.trim().toLowerCase(),
+    token: token.trim(),
+    type: 'recovery',
+  });
+
+  if (error || !data.session) {
+    throw toApiError(error, 'That code did not work');
+  }
+  return data.session;
+}
+
+/** Sets a new password for the session `verifyPasswordResetOtp` produced. */
+export async function updatePassword(password: string): Promise<void> {
+  const {error} = await supabase.auth.updateUser({password});
+  if (error) {
+    throw toApiError(error, 'Could not change your password');
+  }
+}
+
 export async function signOut(): Promise<void> {
   const {error} = await supabase.auth.signOut();
   if (error) {
@@ -125,15 +186,35 @@ export async function isUsernameAvailable(username: string): Promise<boolean> {
   return Boolean(data);
 }
 
-export async function setUsername(username: string): Promise<void> {
-  const {error} = await supabase
-    .from('profiles')
-    .update({username: username.trim().toLowerCase()})
-    .eq('id', (await supabase.auth.getUser()).data.user?.id ?? '');
+/**
+ * FR-02: claims the permanent username.
+ *
+ * Goes through the `set_username` RPC rather than an UPDATE on `profiles`.
+ * The table write could not enforce "once only" — FR-02 and the onboarding
+ * copy both promise the name is permanent — and it needed a table-wide UPDATE
+ * grant, which also let a client write `is_shadow_suspended` (doc 06 §3). The
+ * function owns both rules; the client no longer holds the grant.
+ *
+ * Returns the stored name, which may differ from what was typed only by the
+ * trimming and lower-casing both sides apply.
+ */
+export async function setUsername(username: string): Promise<string> {
+  const {data, error} = await supabase.rpc('set_username', {
+    p_username: username.trim().toLowerCase(),
+  });
 
   if (error) {
     throw toApiError(error, 'Could not save that name');
   }
+
+  // doc 05 §7: the expected rejections (taken, malformed, already chosen) come
+  // back as a 200 carrying an error envelope, not as a thrown error.
+  const rejection = parseErrorEnvelope(data);
+  if (rejection) {
+    throw rejection;
+  }
+
+  return String((data as {username?: unknown} | null)?.username ?? username);
 }
 
 /**

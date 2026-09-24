@@ -9,8 +9,11 @@ import {ErrorBoundary, Icon, Loader} from '@components/index';
 import {queryKeys} from '@core/constants/queryKeys';
 import {useTheme} from '@core/theme/ThemeProvider';
 import {ChooseUsernameScreen} from '@features/auth/screens/ChooseUsernameScreen';
+import {ForgotPasswordScreen} from '@features/auth/screens/ForgotPasswordScreen';
+import {ResetPasswordScreen} from '@features/auth/screens/ResetPasswordScreen';
 import {SignInScreen} from '@features/auth/screens/SignInScreen';
 import {SignUpScreen} from '@features/auth/screens/SignUpScreen';
+import {VerifyOtpScreen} from '@features/auth/screens/VerifyOtpScreen';
 import {useAuthStore} from '@features/auth/store/authStore';
 import {LeaderboardScreen} from '@features/leaderboard/screens/LeaderboardScreen';
 import {MapScreen} from '@features/map/screens/MapScreen';
@@ -64,8 +67,19 @@ const ProfileTabIcon = ({color}: TabIconProps) => (
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const Tabs = createBottomTabNavigator<MainTabParamList>();
 
+/**
+ * Shared stack options.
+ *
+ * `slide_from_right` on every stack rather than per-navigator defaults: RN
+ * 0.87's native-stack picks a different default per platform, so leaving it
+ * unset means the auth flow slides on iOS and fades on Android. Modals opt out
+ * individually — a sheet that arrives from the side is not a sheet.
+ */
+const stackScreenOptions = {headerShown: false, animation: 'slide_from_right'} as const;
+
 export function RootNavigator(): React.JSX.Element {
   const status = useAuthStore(state => state.status);
+  const isRecoveringPassword = useAuthStore(state => state.isRecoveringPassword);
 
   // The auth store restores the session from storage before this resolves, so
   // a returning user goes straight to the map with no sign-in flash (FR-07).
@@ -77,15 +91,28 @@ export function RootNavigator(): React.JSX.Element {
     return <AuthStack />;
   }
 
+  // Checked before the authenticated stack: verifying a recovery code signs
+  // the user in, and dropping them on the map with the password they just
+  // declared lost is the one outcome this flow must not produce.
+  if (isRecoveringPassword) {
+    return (
+      <RootStack.Navigator screenOptions={stackScreenOptions}>
+        <RootStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
+      </RootStack.Navigator>
+    );
+  }
+
   return <AuthenticatedStack />;
 }
 
 function AuthStack(): React.JSX.Element {
   return (
-    <RootStack.Navigator screenOptions={{headerShown: false}}>
+    <RootStack.Navigator screenOptions={stackScreenOptions}>
       <RootStack.Screen name="Onboarding" component={OnboardingScreen} />
       <RootStack.Screen name="SignUp" component={SignUpScreen} />
       <RootStack.Screen name="SignIn" component={SignInScreen} />
+      <RootStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+      <RootStack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
     </RootStack.Navigator>
   );
 }
@@ -109,7 +136,7 @@ function AuthenticatedStack(): React.JSX.Element {
 
   if (profile?.needsUsername) {
     return (
-      <RootStack.Navigator screenOptions={{headerShown: false}}>
+      <RootStack.Navigator screenOptions={stackScreenOptions}>
         <RootStack.Screen name="ChooseUsername" component={ChooseUsernameScreen} />
       </RootStack.Navigator>
     );
@@ -118,7 +145,7 @@ function AuthenticatedStack(): React.JSX.Element {
   return (
     <RootStack.Navigator
       screenOptions={{
-        headerShown: false,
+        ...stackScreenOptions,
         contentStyle: {backgroundColor: theme.colors.background},
       }}>
       <RootStack.Screen name="MainTabs" component={MainTabs} />
@@ -148,12 +175,17 @@ function AuthenticatedStack(): React.JSX.Element {
       <RootStack.Screen
         name="LocationRationale"
         component={LocationRationaleScreen}
-        options={{presentation: 'modal'}}
+        options={{presentation: 'modal', animation: 'slide_from_bottom'}}
       />
       <RootStack.Screen
         name="ParcelDetail"
         component={ParcelDetailScreen}
-        options={{presentation: 'modal', headerShown: true, title: t('parcel.area')}}
+        options={{
+          presentation: 'modal',
+          animation: 'slide_from_bottom',
+          headerShown: true,
+          title: t('parcel.area'),
+        }}
       />
       <RootStack.Screen
         name="PublicProfile"
@@ -177,6 +209,9 @@ function MainTabs(): React.JSX.Element {
     <Tabs.Navigator
       screenOptions={{
         headerShown: false,
+        // Tabs slide sideways in the direction of travel; a push animation
+        // between siblings would imply a hierarchy the tabs do not have.
+        animation: 'shift',
         tabBarActiveTintColor: theme.colors.accent,
         tabBarInactiveTintColor: theme.colors.tabInactive,
         tabBarStyle: {

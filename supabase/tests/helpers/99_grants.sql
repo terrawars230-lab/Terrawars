@@ -39,6 +39,16 @@ revoke all on function public.abandon_stale_walks()                 from anon, a
 revoke all on function public.purge_deleted_accounts()              from anon, authenticated;
 revoke all on function public.run_nightly_maintenance()             from anon, authenticated;
 
+-- Same reason, for the profiles column grants.
+--
+-- In a real project the migration's REVOKE runs after the table exists and
+-- sticks. Here the order is inverted — `grant all on all tables` above runs
+-- after every migration — so the lockdown has to be re-asserted, or 04_signup
+-- would test a database that grants more than production does.
+revoke update on public.profiles from anon, authenticated;
+grant update (display_name, avatar_url, home_city, home_region)
+  on public.profiles to authenticated;
+
 -- The suite's own role must be able to switch into the client roles.
 do $$
 begin

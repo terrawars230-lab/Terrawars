@@ -28,18 +28,28 @@ interface AuthState {
   status: AuthStatus;
   session: Session | null;
   userId: string | null;
+  /**
+   * True from "send me a code" until the new password is saved.
+   *
+   * Verifying the code signs the user in, so without this RootNavigator would
+   * swap straight to the map and the new-password screen would never render.
+   */
+  isRecoveringPassword: boolean;
 
   /** Subscribes to Supabase auth changes. Returns an unsubscribe function. */
   initialise: () => () => void;
   signIn: (credentials: authApi.Credentials) => Promise<void>;
-  signUp: (credentials: authApi.Credentials) => Promise<void>;
+  /** Resolves with `needsEmailConfirmation` so the screen can say what happens next. */
+  signUp: (credentials: authApi.Credentials) => Promise<authApi.SignUpResult>;
   signOut: () => Promise<void>;
+  setRecoveringPassword: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>(set => ({
   status: 'initialising',
   session: null,
   userId: null,
+  isRecoveringPassword: false,
 
   initialise: () => {
     // onAuthStateChange fires INITIAL_SESSION on subscribe, so the restored
@@ -56,6 +66,7 @@ export const useAuthStore = create<AuthState>(set => ({
       });
 
       if (event === 'SIGNED_OUT') {
+        set({isRecoveringPassword: false});
         // Wipe cached game state so the next user on this device never sees the
         // previous one's walk. The Supabase session lives in AsyncStorage and
         // is cleared by signOut() itself, so this cannot log anyone out.
@@ -72,18 +83,26 @@ export const useAuthStore = create<AuthState>(set => ({
   },
 
   signUp: async credentials => {
-    const session = await authApi.signUpWithEmail(credentials);
-    if (session) {
-      set({session, userId: session.user.id, status: 'signedIn'});
+    const result = await authApi.signUpWithEmail(credentials);
+    if (result.session) {
+      set({
+        session: result.session,
+        userId: result.session.user.id,
+        status: 'signedIn',
+      });
     }
-    // No session means email confirmation is required; the caller shows that
-    // message and the listener will pick the session up when it arrives.
+    // No session means email confirmation is required. The result carries that
+    // back so the screen can say so; the listener picks the session up on its
+    // own once the user follows the link.
+    return result;
   },
 
   signOut: async () => {
     await authApi.signOut();
-    set({session: null, userId: null, status: 'signedOut'});
+    set({session: null, userId: null, status: 'signedOut', isRecoveringPassword: false});
   },
+
+  setRecoveringPassword: value => set({isRecoveringPassword: value}),
 }));
 
 /**

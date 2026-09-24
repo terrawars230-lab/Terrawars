@@ -107,6 +107,11 @@ export function SignInScreen(): React.JSX.Element {
             }}
           />
           <Button
+            label={t('auth.forgotPassword')}
+            variant="ghost"
+            onPress={() => navigation.navigate('ForgotPassword')}
+          />
+          <Button
             label={t('auth.noAccountPrompt')}
             variant="ghost"
             onPress={() => navigation.navigate('SignUp')}

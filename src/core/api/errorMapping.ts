@@ -39,6 +39,11 @@ const AUTH_CODE_MAP: Readonly<Record<string, ErrorCode>> = {
   signup_disabled: 'SIGNUP_DISABLED',
   email_provider_disabled: 'SIGNUP_DISABLED',
   over_email_send_rate_limit: 'EMAIL_RATE_LIMITED',
+  // Supabase returns otp_expired for a wrong code as well as a stale one, so
+  // the copy has to cover both.
+  otp_expired: 'OTP_EXPIRED',
+  otp_disabled: 'OTP_EXPIRED',
+  same_password: 'SAME_PASSWORD',
   over_request_rate_limit: 'RATE_LIMITED',
   over_sms_send_rate_limit: 'RATE_LIMITED',
   validation_failed: 'ERR_VALIDATION',

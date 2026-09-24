@@ -89,6 +89,16 @@ export function ChooseUsernameScreen(): React.JSX.Element {
       // get_me(), so invalidating the profile is what dismisses it.
       await queryClient.invalidateQueries({queryKey: queryKeys.profile.me()});
     } catch (caught) {
+      // USERNAME_ALREADY_SET means the name was claimed on another device
+      // while this screen was open. Showing the message and stopping would
+      // strand the user here for good — Confirm only enables for an
+      // *available* name, and their own name is no longer available. Re-read
+      // the profile instead: `needs_username` is now false and the gate
+      // dismisses itself.
+      if (ApiError.isApiError(caught) && caught.code === 'USERNAME_ALREADY_SET') {
+        await queryClient.invalidateQueries({queryKey: queryKeys.profile.me()});
+        return;
+      }
       setError(ApiError.isApiError(caught) ? t(errorMessageKey(caught.code)) : t('errors.UNKNOWN'));
     } finally {
       setIsSubmitting(false);

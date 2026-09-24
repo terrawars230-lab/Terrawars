@@ -15,6 +15,9 @@ export type AuthStackParamList = {
   Onboarding: undefined;
   SignIn: undefined;
   SignUp: undefined;
+  ForgotPassword: undefined;
+  VerifyOtp: {email: string};
+  ResetPassword: undefined;
 };
 
 export type MainTabParamList = {
@@ -32,6 +35,11 @@ export type RootStackParamList = {
   Onboarding: undefined;
   SignIn: undefined;
   SignUp: undefined;
+
+  // FR-01 password recovery, by emailed code rather than a deep link.
+  ForgotPassword: undefined;
+  VerifyOtp: {email: string};
+  ResetPassword: undefined;
 
   // Post-auth gates
   ChooseUsername: undefined;
